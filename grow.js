@@ -1,562 +1,696 @@
 /*
-  Bongweb landing page: a real tree that grows as you scroll.
+  Bongweb landing page: the studio's story in nine painted pictures, played by scrolling.
 
-  1. Underground, a bean germinates: its root pushes down, side roots spread, a pale hook rises.
-  2. The seedling breaks the turf and grows up; the camera follows it.
-  3. The tree grows from the ground: trunk first, then limbs, then leaves, while the camera pulls back.
-  4. The camera visits five branches. Each holds one part of the studio as a clay island.
-  5. The camera pulls back to the whole tree and the WhatsApp call to action.
+  1. A seed engraved "Bongweb" puts out its roots.
+  2. The seed cracks open and a sprout grows out of it.
+  3. The sprout grows into a young tree, and the young tree into a giant tree with five tree houses.
+  4. The camera flies into each tree house (Build, Brand, Content, Growth, Checked) and its picture
+     fills the screen, alive with small movements.
+  5. The camera pulls back to the whole tree.
 
-  Everything is photographic (assets/photo, assets/germ; measurements in data/scene.js).
-  Growth uses "grow maps": greyscale images that say how far each pixel is from where growth
-  starts, measured along the plant itself. A small WebGL shader shows only the pixels the growth
-  has reached, so roots, stem, limbs and leaves extend along their real shapes.
-  Add ?grow=7.5 to the URL to pin the story at a point (for testing).
+  Pictures and measurements live in data/story.js. Each picture has a mask (assets/story/*-mask.png):
+    red   which pixels stay hidden until growth reaches them (roots, sprout; the whole picture for the trees)
+    green the order growth reaches them (0 first, 1 last)
+    blue  how much the leaves there move in the breeze
+  One WebGL shader draws every picture with its growth, breeze and "rigs" (a head that nods, a sign that
+  swings on its ropes). Lamp light, glints, steam and falling leaves are drawn on a 2D canvas above it.
+  Add ?grow=7.5 to the URL to pin the story at a point, and &t=2 to pin the animation clock (for testing).
 */
 (function () {
   "use strict";
   var section = document.getElementById("grow");
-  var SCENE = window.BONGWEB_SCENE;
-  if (!section || !SCENE) return;
+  var S = window.BONGWEB_STORY;
+  if (!section || !S) return;
   var stage = section.querySelector(".grow-stage");
   var canvas = section.querySelector(".grow-canvas");
-  var world = section.querySelector(".grow-world");
-  var ctx = canvas.getContext("2d");
+  var fxCanvas = section.querySelector(".grow-fx");
+  var fx = fxCanvas.getContext("2d");
   var reduceMotion = !!(window.matchMedia && matchMedia("(prefers-reduced-motion: reduce)").matches);
-  var groups = window.BONGWEB_GROUPS || [];
-  var services = window.BONGWEB_SERVICES || [];
-  var wa = window.bongwebWa || function () { return "#"; };
-  var GERM = SCENE.germ, SEED = SCENE.seedling, SAPS = SCENE.saplings || [];
-
-  var STOPS = [
-    { id: "build", img: "assets/clay/frames/build-a.webp", frames: ["assets/clay/frames/build-b.webp", "assets/clay/frames/build-c.webp"], alt: "Clay builders at a desk, one typing code, one carrying a block to a glowing website panel" },
-    { id: "brand", img: "assets/clay/frames/brand-a.webp", frames: ["assets/clay/frames/brand-b.webp", "assets/clay/frames/brand-c.webp"], alt: "Clay designers pinning photos and colour swatches to a board" },
-    { id: "content", img: "assets/clay/frames/content-a.webp", frames: ["assets/clay/frames/content-b.webp", "assets/clay/frames/content-c.webp"], alt: "A clay camera operator filming a creator beside a ring light" },
-    { id: "growth", img: "assets/clay/frames/growth-a.webp", frames: ["assets/clay/frames/growth-b.webp", "assets/clay/frames/growth-c.webp"], alt: "Clay paper planes flying up past a rising bar chart" },
-    { id: "checked", img: "assets/clay/frames/checked-a.webp", frames: ["assets/clay/frames/checked-b.webp", "assets/clay/frames/checked-c.webp"], alt: "A clay reviewer reading a long scroll through a magnifying glass while another stamps approval" },
-  ];
-  var CHECKED = {
-    name: "Checked", promise: "Nothing ships unchecked.",
-    items: ["Senior review on every piece", "One-page scope", "Fixed price", "A date we keep", "Handover note"],
-  };
+  var PW = S.w, PH = S.h, PICS = S.pics, BR = S.branches;
+  var BG = [0.09, 0.07, 0.045];
   var PI = Math.PI;
 
   /* ---------- helpers ---------- */
   function clamp(v, a, b) { return v < a ? a : v > b ? b : v; }
   function lerp(a, b, t) { return a + (b - a) * t; }
-  function ease(t) { return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2; }
   function smooth(t) { return t * t * (3 - 2 * t); }
+  function ease(t) { return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2; }
+  function seg(f, a, b) { return clamp((f - a) / (b - a), 0, 1); }
   function rng(seed) { return function () { seed |= 0; seed = (seed + 0x6d2b79f5) | 0; var t = Math.imul(seed ^ (seed >>> 15), 1 | seed); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; }
   function makeCanvas(w, h) { var c = document.createElement("canvas"); c.width = w; c.height = h; return c; }
-  function mixF(a, b, w) { return { x: lerp(a.x, b.x, w), y: lerp(a.y, b.y, w), z: Math.exp(lerp(Math.log(a.z), Math.log(b.z), w)) }; }
-  function load(src) { return new Promise(function (res) { if (!src) return res(null); var i = new Image(); i.decoding = "async"; i.onload = function () { res(i); }; i.onerror = function () { res(null); }; i.src = src; }); }
+  function loadImg(src) {
+    return new Promise(function (res) {
+      if (!src) return res(null);
+      var i = new Image(); i.decoding = "async";
+      i.onload = function () { res(i); }; i.onerror = function () { res(null); };
+      i.src = src;
+    });
+  }
 
-  /* ---------- growth reveal: shows only the pixels a grow map has reached ---------- */
-  function Revealer(img, map, softness) {
-    var c = makeCanvas(img.width, img.height), last = -1, gl = null;
-    this.canvas = c;
-    try { gl = c.getContext("webgl", { premultipliedAlpha: true, preserveDrawingBuffer: true, alpha: true }); } catch (e) { gl = null; }
-    var ok = false;
-    if (gl && map) {
-      try {
-        var sh = function (type, src) { var s = gl.createShader(type); gl.shaderSource(s, src); gl.compileShader(s); return s; };
-        var prog = gl.createProgram();
-        gl.attachShader(prog, sh(gl.VERTEX_SHADER, "attribute vec2 p;varying vec2 uv;void main(){uv=vec2(p.x*0.5+0.5,0.5-p.y*0.5);gl_Position=vec4(p,0.0,1.0);}"));
-        gl.attachShader(prog, sh(gl.FRAGMENT_SHADER,
-          "precision mediump float;varying vec2 uv;uniform sampler2D img;uniform sampler2D map;uniform float T;uniform float soft;" +
-          "void main(){vec4 c=texture2D(img,uv);float d=texture2D(map,uv).r;float a=1.0-smoothstep(T-soft,T,d);" +
-          "float edge=smoothstep(T-soft*5.0,T-soft,d)*a;c.rgb+=edge*0.08*c.a;gl_FragColor=c*a;}"));
-        gl.linkProgram(prog);
-        if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) throw new Error("shader");
-        gl.useProgram(prog);
-        var buf = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, buf);
-        gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]), gl.STATIC_DRAW);
-        var loc = gl.getAttribLocation(prog, "p"); gl.enableVertexAttribArray(loc); gl.vertexAttribPointer(loc, 2, gl.FLOAT, false, 0, 0);
-        [[img, true], [map, false]].forEach(function (pair, unit) {
-          var tx = gl.createTexture(); gl.activeTexture(gl.TEXTURE0 + unit); gl.bindTexture(gl.TEXTURE_2D, tx);
-          gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, pair[1]);
-          gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
-          gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-          gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, pair[0]);
-        });
-        gl.uniform1i(gl.getUniformLocation(prog, "img"), 0); gl.uniform1i(gl.getUniformLocation(prog, "map"), 1);
-        var soft = softness || 0.025;
-        gl.uniform1f(gl.getUniformLocation(prog, "soft"), soft);
-        var uT = gl.getUniformLocation(prog, "T");
-        gl.viewport(0, 0, c.width, c.height); gl.clearColor(0, 0, 0, 0);
-        this.render = function (T) {
-          if (Math.abs(T - last) < 1e-4) return; last = T;
-          gl.clear(gl.COLOR_BUFFER_BIT); gl.uniform1f(uT, T * (1 + 2 * soft) - soft); gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
-        };
-        ok = gl.getError() === gl.NO_ERROR;
-      } catch (e) { ok = false; }
-    }
-    if (!ok) {   // fallback without WebGL: fade in
-      var c2 = makeCanvas(img.width, img.height), x = c2.getContext("2d");
-      this.canvas = c2;
-      this.render = function (T) { if (Math.abs(T - last) < 1e-3) return; last = T; x.clearRect(0, 0, c2.width, c2.height); x.globalAlpha = clamp(T * 1.4, 0, 1); x.drawImage(img, 0, 0); };
+  /* ---------- motion of the rigs ---------- */
+  function wave(kind, f, t, ph) {
+    var x = t * f + (ph || 0), p = x - Math.floor(x), s2 = Math.sin(2 * PI * x);
+    switch (kind) {
+      case "talk": return s2 * (0.6 + 0.4 * Math.sin(2 * PI * x * 0.37));
+      case "press": return p < 0.5 ? smooth(p / 0.5) : 1 - smooth((p - 0.5) / 0.5);
+      case "lift": return 0.5 - 0.5 * Math.cos(2 * PI * x);
+      case "type": return Math.sin(2 * PI * x) * 0.6 + Math.sin(2 * PI * x * 1.73 + 1) * 0.4;
+      case "paint": return Math.sin(2 * PI * x) * 0.8 + Math.sin(4 * PI * x + 0.6) * 0.2;
+      case "write": return Math.sin(2 * PI * x) * 0.7 + Math.sin(2 * PI * x * 2.3) * 0.3;
+      default: return s2;
     }
   }
 
-  /* ---------- sprites ---------- */
-  var MOTE = (function () {
-    var s = 32, c = makeCanvas(s, s), x = c.getContext("2d");
-    var g = x.createRadialGradient(s / 2, s / 2, 0, s / 2, s / 2, s / 2);
-    g.addColorStop(0, "rgba(255,252,235,1)"); g.addColorStop(0.3, "rgba(255,245,210,.55)"); g.addColorStop(1, "rgba(255,245,210,0)");
-    x.fillStyle = g; x.fillRect(0, 0, s, s);
+  /* ---------- pictures ---------- */
+  var MAXR = 10;
+  var IM = {};
+  Object.keys(PICS).forEach(function (name) {
+    var c = PICS[name], rigs = (c.rigs || []).slice(0, MAXR);
+    var C = new Float32Array(MAXR * 4), P = new Float32Array(MAXR * 4);
+    rigs.forEach(function (q, i) {
+      C[i * 4] = q.c[0] / PW; C[i * 4 + 1] = q.c[1] / PH; C[i * 4 + 2] = q.r[0] / PW; C[i * 4 + 3] = q.r[1] / PH;
+      var pv = q.p || q.c; P[i * 4] = pv[0] / PW; P[i * 4 + 1] = pv[1] / PH;
+    });
+    IM[name] = { name: name, cfg: c, rigs: rigs, rigC: C, rigP: P, ready: false };
+  });
+  var RIGM = new Float32Array(MAXR * 4);
+  function rigMotion(p, t) {
+    RIGM.fill(0);
+    p.rigs.forEach(function (q, i) {
+      var v = wave(q.wave, q.f, t, q.ph);
+      RIGM[i * 4] = (q.rot || 0) * v; RIGM[i * 4 + 1] = (q.dx || 0) * v / PW; RIGM[i * 4 + 2] = (q.dy || 0) * v / PH;
+      RIGM[i * 4 + 3] = (q.glow || 0) * Math.abs(v);
+    });
+    return RIGM;
+  }
+
+  /* ---------- renderer: WebGL (growth, breeze, rigs), or plain canvas as a fallback ---------- */
+  var VS = "attribute vec2 aPos;uniform vec4 uQuad;uniform vec4 uImg;uniform vec2 uView;varying vec2 vUv;" +
+    "void main(){vec2 p=uQuad.xy+aPos*uQuad.zw;vUv=(p-uImg.xy)/uImg.zw;vec2 c=p/uView*2.0-1.0;gl_Position=vec4(c.x,-c.y,0.0,1.0);}";
+  var FS = [
+    "#ifdef GL_FRAGMENT_PRECISION_HIGH", "precision highp float;", "#else", "precision mediump float;", "#endif",
+    "uniform sampler2D uTex;uniform sampler2D uSoft;uniform sampler2D uMask;",
+    "uniform float uUseMask;uniform float uReveal;uniform float uT;uniform float uEdge;uniform float uRim;",
+    "uniform float uAlpha;uniform float uBlur;uniform float uTime;uniform float uWind;uniform float uFeather;",
+    "uniform float uAsp;uniform float uDim;uniform float uMirror;uniform float uRigs;uniform vec2 uTexel;",
+    "uniform vec4 uC[10];uniform vec4 uP[10];uniform vec4 uM[10];",
+    "varying vec2 vUv;",
+    "void main(){",
+    " vec2 uv=vUv;",
+    " if(uMirror>0.5){uv=1.0-abs(1.0-mod(uv,2.0));}",
+    " else if(uv.x<0.0||uv.y<0.0||uv.x>1.0||uv.y>1.0){discard;}",
+    " vec2 q=uv;float glow=0.0;",
+    " for(int i=0;i<10;i++){",
+    "  if(float(i)>=uRigs)break;",
+    "  vec4 C=uC[i];vec2 d=(uv-C.xy)/C.zw;float w=1.0-smoothstep(0.5,1.0,length(d));",
+    "  if(w>0.0){vec4 P=uP[i];vec4 M=uM[i];vec2 s=vec2((q.x-P.x)*uAsp,q.y-P.y);float a=-M.x*w;float cs=cos(a);float sn=sin(a);",
+    "   s=vec2(cs*s.x-sn*s.y,sn*s.x+cs*s.y);q=vec2(s.x/uAsp+P.x,s.y+P.y)-M.yz*w;glow+=M.w*w;}",
+    " }",
+    " vec4 m=vec4(0.0);",
+    " if(uUseMask>0.5){",
+    "  float wv=texture2D(uMask,uv).b*uWind;",
+    "  if(wv>0.001){vec2 o=vec2(sin(uTime*1.1+uv.x*5.0+uv.y*9.0)+0.35*sin(uTime*2.7+uv.x*31.0+uv.y*23.0),",
+    "   0.6*cos(uTime*0.9+uv.x*7.0-uv.y*4.0)+0.25*sin(uTime*2.3+uv.y*29.0+uv.x*11.0));q+=o*wv*uTexel;}",
+    "  m=texture2D(uMask,q);",
+    " }",
+    " vec3 col=texture2D(uTex,q).rgb;",
+    " if(uBlur>0.001){col=mix(col,texture2D(uSoft,q).rgb,uBlur);}",
+    " col=col*uDim+glow*vec3(1.0,0.93,0.78);",
+    " float a=1.0;",
+    " if(uReveal>0.5){float rev=1.0-smoothstep(uT-uEdge,uT,m.g);a=1.0-m.r*(1.0-rev);",
+    "  float front=smoothstep(uT-uEdge*3.0,uT-uEdge*0.6,m.g)*rev*m.r;col+=front*uRim*vec3(0.11,0.1,0.06);}",
+    " if(uFeather>0.0){vec2 e=min(uv,1.0-uv);a*=smoothstep(0.0,uFeather,e.x)*smoothstep(0.0,uFeather*uAsp,e.y);}",
+    " a*=uAlpha;",
+    " gl_FragColor=vec4(col*a,a);",
+    "}"].join("\n");
+
+  var R = null, clockT = 0;
+  function makeGL() {
+    var opts = { alpha: false, antialias: false, premultipliedAlpha: true, preserveDrawingBuffer: false, powerPreference: "high-performance" };
+    var gl = null, gl2 = false;
+    try {
+      gl = canvas.getContext("webgl2", opts); gl2 = !!gl;
+      if (!gl) gl = canvas.getContext("webgl", opts) || canvas.getContext("experimental-webgl", opts);
+    } catch (e) { gl = null; }
+    if (!gl) return null;
+    var U = {}, blank, prog;
+    function shader(type, src) {
+      var s = gl.createShader(type); gl.shaderSource(s, src); gl.compileShader(s);
+      if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(s) || "shader");
+      return s;
+    }
+    function init() {
+      prog = gl.createProgram();
+      gl.attachShader(prog, shader(gl.VERTEX_SHADER, VS)); gl.attachShader(prog, shader(gl.FRAGMENT_SHADER, FS));
+      gl.linkProgram(prog);
+      if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) throw new Error("link");
+      gl.useProgram(prog);
+      var buf = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, buf);
+      gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([0, 0, 1, 0, 0, 1, 1, 1]), gl.STATIC_DRAW);
+      var aPos = gl.getAttribLocation(prog, "aPos"); gl.enableVertexAttribArray(aPos); gl.vertexAttribPointer(aPos, 2, gl.FLOAT, false, 0, 0);
+      ["uQuad", "uImg", "uView", "uTex", "uSoft", "uMask", "uUseMask", "uReveal", "uT", "uEdge", "uRim", "uAlpha", "uBlur", "uTime",
+        "uWind", "uFeather", "uAsp", "uDim", "uMirror", "uRigs", "uTexel", "uC", "uP", "uM"].forEach(function (n) { U[n] = gl.getUniformLocation(prog, n); });
+      gl.uniform1i(U.uTex, 0); gl.uniform1i(U.uSoft, 1); gl.uniform1i(U.uMask, 2);
+      gl.uniform1f(U.uAsp, PW / PH); gl.uniform2f(U.uTexel, 1 / PW, 1 / PH);
+      gl.enable(gl.BLEND); gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
+      gl.disable(gl.DEPTH_TEST);
+      blank = gl.createTexture(); gl.bindTexture(gl.TEXTURE_2D, blank);
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 1, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array([0, 0, 0, 255]));
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+      if (gl.getError() !== gl.NO_ERROR) throw new Error("gl");
+    }
+    try { init(); } catch (e) { if (window.console) console.warn("grow: WebGL unavailable, using the simple renderer.", e); return null; }
+
+    function texture(img, mip) {
+      if (!img) return null;
+      var t = gl.createTexture(); gl.bindTexture(gl.TEXTURE_2D, t);
+      gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, false);
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, img);
+      var useMip = mip && gl2;
+      if (useMip) gl.generateMipmap(gl.TEXTURE_2D);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, useMip ? gl.LINEAR_MIPMAP_LINEAR : gl.LINEAR);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+      return t;
+    }
+    var lost = false;
+    canvas.addEventListener("webglcontextlost", function (e) { e.preventDefault(); lost = true; });
+    canvas.addEventListener("webglcontextrestored", function () {
+      try { init(); } catch (e) { return; }
+      lost = false;
+      Object.keys(IM).forEach(function (n) { var p = IM[n]; p.tTex = p.tSoft = p.tMask = p.tPlate = null; api.upload(p); });
+      api.resize();
+    });
+    var api = {
+      kind: "gl",
+      upload: function (p) {   // called twice: first with only the soft copy, then with everything
+        if (p.soft && !p.tSoft) p.tSoft = texture(p.soft, false);
+        if (p.img && !p.tTex) {
+          p.tMask = texture(p.mask, false); p.tPlate = texture(p.plate, false);
+          p.tTex = texture(p.img, true);
+        }
+      },
+      resize: function () { gl.viewport(0, 0, canvas.width, canvas.height); gl.uniform2f(U.uView, canvas.width, canvas.height); },
+      begin: function () { gl.clearColor(BG[0], BG[1], BG[2], 1); gl.clear(gl.COLOR_BUFFER_BIT); },
+      draw: function (L) {
+        if (lost) return;
+        var p = IM[L.pic], early = !L.plate && !p.tTex, tx = L.plate ? p.tPlate : (p.tTex || p.tSoft);
+        if (!tx) return;
+        var r = L.rect, q = L.mirror ? { x: 0, y: 0, w: W, h: H } : clipToScreen(r);
+        if (!q) return;
+        gl.uniform4f(U.uQuad, q.x * DPR, q.y * DPR, q.w * DPR, q.h * DPR);
+        gl.uniform4f(U.uImg, r.x * DPR, r.y * DPR, r.w * DPR, r.h * DPR);
+        var useMask = !L.plate && !early && !!p.tMask;
+        gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, tx);
+        gl.activeTexture(gl.TEXTURE1); gl.bindTexture(gl.TEXTURE_2D, (!L.plate && p.tSoft) || blank);
+        gl.activeTexture(gl.TEXTURE2); gl.bindTexture(gl.TEXTURE_2D, useMask ? p.tMask : blank);
+        var edge = p.cfg.soft || 0.06;
+        gl.uniform1f(U.uUseMask, useMask ? 1 : 0);
+        gl.uniform1f(U.uReveal, useMask && L.reveal ? 1 : 0);
+        gl.uniform1f(U.uEdge, edge);
+        gl.uniform1f(U.uT, lerp(-0.01, 1 + edge + 0.01, L.T == null ? 1 : L.T));
+        gl.uniform1f(U.uRim, L.rim ? 1 : 0);
+        gl.uniform1f(U.uAlpha, L.alpha);
+        gl.uniform1f(U.uBlur, L.plate || early || !p.tSoft ? 0 : clamp(L.blur || 0, 0, 1));
+        gl.uniform1f(U.uTime, clockT);
+        gl.uniform1f(U.uWind, L.live && !L.plate && !reduceMotion ? (p.cfg.wind || 0) : 0);
+        gl.uniform1f(U.uFeather, L.feather || 0);
+        gl.uniform1f(U.uDim, L.dim || 1);
+        gl.uniform1f(U.uMirror, L.mirror ? 1 : 0);
+        var n = L.live && !L.plate && !early && !reduceMotion ? p.rigs.length : 0;
+        if (n) { gl.uniform4fv(U.uC, p.rigC); gl.uniform4fv(U.uP, p.rigP); gl.uniform4fv(U.uM, rigMotion(p, clockT)); }
+        gl.uniform1f(U.uRigs, n);
+        gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+      },
+    };
+    return api;
+  }
+  function make2D() {
+    var c = canvas.getContext("2d");
+    if (!c) return null;
+    return {
+      kind: "2d",
+      upload: function () {},
+      resize: function () {},
+      begin: function () {
+        c.setTransform(1, 0, 0, 1, 0, 0); c.globalAlpha = 1;
+        c.fillStyle = "rgb(" + BG.map(function (v) { return Math.round(v * 255); }).join(",") + ")";
+        c.fillRect(0, 0, canvas.width, canvas.height);
+      },
+      draw: function (L) {
+        if (L.plate) return;   // without WebGL roots and sprout are simply shown grown
+        var p = IM[L.pic], r = L.rect, a = L.alpha, im = p.img || p.soft;
+        if (!im) return;
+        if (L.reveal && p.cfg.mask !== "full") a *= clamp((L.T == null ? 1 : L.T) * 1.4, 0, 1);
+        var b = p.soft ? clamp(L.blur || 0, 0, 1) : 0;
+        c.globalAlpha = a * (1 - b * 0.85);
+        c.drawImage(im, r.x * DPR, r.y * DPR, r.w * DPR, r.h * DPR);
+        if (b > 0.02 && p.img) { c.globalAlpha = a * b; c.drawImage(p.soft, r.x * DPR, r.y * DPR, r.w * DPR, r.h * DPR); }
+        if (L.dim && L.dim < 1) { c.globalAlpha = a * (1 - L.dim); c.fillStyle = "#000"; c.fillRect(r.x * DPR, r.y * DPR, r.w * DPR, r.h * DPR); }
+        c.globalAlpha = 1;
+      },
+    };
+  }
+  function clipToScreen(r) {
+    var x0 = Math.max(0, r.x), y0 = Math.max(0, r.y), x1 = Math.min(W, r.x + r.w), y1 = Math.min(H, r.y + r.h);
+    return x1 > x0 && y1 > y0 ? { x: x0, y: y0, w: x1 - x0, h: y1 - y0 } : null;
+  }
+
+  /* ---------- layout ---------- */
+  var W = 0, H = 0, DPR = 1;
+  function portrait() { return W / H < 0.9; }
+
+  // world: the young tree's picture is the reference; the other growth pictures are placed by `at`
+  function place(name) { var a = PICS[name].at || [0, 0, 1]; return { ox: a[0], oy: a[1], s: a[2] }; }
+  function coverZ(name) { var p = place(name); return Math.max(W / (PW * p.s), H / (PH * p.s)); }
+  function fit(c, name) {   // keep the picture over the whole screen where it is big enough
+    var p = place(name), hw = W / 2 / c.z, hh = H / 2 / c.z, iw = PW * p.s, ih = PH * p.s;
+    c.x = iw >= hw * 2 ? clamp(c.x, p.ox + hw, p.ox + iw - hw) : p.ox + iw / 2;
+    c.y = ih >= hh * 2 ? clamp(c.y, p.oy + hh, p.oy + ih - hh) : p.oy + ih / 2;
     return c;
+  }
+  // camera keyframes: a point of a picture at the centre; landscape screens zoom relative to "cover",
+  // portrait screens show `vw` picture pixels across
+  var K = {
+    seedA: { pic: "seed", u: 1110, v: 470, mul: 1.22, vw: 760 },
+    seedB: { pic: "seed", u: 1040, v: 500, mul: 1.04, vw: 900 },
+    shell: { pic: "sprout", u: 1052, v: 640, mul: 1.5, vw: 620 },
+    sprout: { pic: "sprout", u: 1062, v: 450, mul: 1.05, vw: 720 },
+    young: { pic: "young", u: 1030, v: 430, mul: 1.0, vw: 1200 },
+    tree: { pic: "tree", u: 836, v: 470, mul: 1.0, vw: 1560 },
+  };
+  function camK(k) {
+    var p = place(k.pic), z = portrait() ? W / (k.vw * p.s) : coverZ(k.pic) * k.mul;
+    return fit({ x: p.ox + k.u * p.s, y: p.oy + k.v * p.s, z: z }, k.pic);
+  }
+  function camHouse(i) {
+    var h = PICS.tree.houses[i], p = place("tree");
+    var z = portrait() ? W / (h[2] * 1.02 * p.s) : Math.min(W / (h[2] * p.s), H / (h[3] * p.s)) * 0.9;
+    z = Math.max(z, coverZ("tree") * 1.25);
+    return fit({ x: p.ox + (h[0] + h[2] / 2) * p.s, y: p.oy + (h[1] + h[3] / 2) * p.s, z: z }, "tree");
+  }
+  function mixCam(a, b, t) { return { x: lerp(a.x, b.x, t), y: lerp(a.y, b.y, t), z: Math.exp(lerp(Math.log(a.z), Math.log(b.z), t)) }; }
+  function hopCam(a, b, t, hop) { var c = mixCam(a, b, t); c.z *= Math.exp(-hop * Math.sin(PI * t)); return c; }
+  function rectOf(name, c) {
+    var p = place(name);
+    return { x: (p.ox - c.x) * c.z + W / 2, y: (p.oy - c.y) * c.z + H / 2, w: PW * p.s * c.z, h: PH * p.s * c.z };
+  }
+  function coverRect(name, mul) {
+    var f = PICS[name].focus || [PW / 2, PH / 2], s = Math.max(W / PW, H / PH) * mul, w = PW * s, h = PH * s;
+    return { x: clamp(W / 2 - f[0] * s, W - w, 0), y: clamp(H / 2 - f[1] * s, H - h, 0), w: w, h: h };
+  }
+  // a branch picture fills the screen and drifts slowly; on phones it is a wide band that pans across the scene
+  function closeRect(i, h, push) {
+    var name = BR[i], f = PICS[name].focus || [PW / 2, PH / 2], dir = i % 2 ? -1 : 1, e = smooth(h), s, w, hh;
+    if (portrait()) {
+      s = W / 820 * push; w = PW * s; hh = PH * s;
+      var pan = lerp(0.12, 0.88, e); if (dir < 0) pan = 1 - pan;
+      return { x: -(w - W) * pan, y: (H + 64) / 2 - hh / 2, w: w, h: hh };
+    }
+    // pan across the whole width while you scroll, so nothing at the edges (a sign, a chat bubble) stays cut off
+    s = Math.max(W / PW, H / PH) * (1 + 0.03 * e) * push; w = PW * s; hh = PH * s;
+    var panX = lerp(0.04, 0.96, e); if (dir < 0) panX = 1 - panX;
+    return { x: (W - w) * panX, y: clamp(H / 2 - (f[1] - 20 * e) * s, H - hh, 0), w: w, h: hh };
+  }
+
+  /* ---------- the scroll story ---------- */
+  var SEGS = [], totalUnits = 0;
+  (function () {
+    var list = [["seed", 2.2], ["sprout", 2.8], ["young", 2.4], ["tree", 2.8], ["full", 0.6]];
+    BR.forEach(function (_, i) { list.push(["dive", 1.5, i], ["hold", 1.1, i]); });
+    list.push(["outro", 1.4], ["end", 0.5]);
+    var at = 0;
+    list.forEach(function (s) { SEGS.push({ k: s[0], d: s[1], i: s[2], a: at }); at += s[1]; });
+    totalUnits = at;
   })();
 
-  /* ---------- layout (rebuilt on resize) ---------- */
-  var W = 0, H = 0, DPR = 1, mobile = false;
-  var IMG = {}, REV = {}, ready = false;
-  var GY = 0, TH = 600, IW = 170, GK = 1, BEANY = 300, SEEDH = 130;
-  var motes = [], leaves = [], birds = [];
-
-  function wx(px) { return px - SCENE.base[0]; }
-  function wy(py) { return py - SCENE.base[1]; }
-
-  function build() {
-    mobile = W < 720;
-    GY = wy(SCENE.ground);
-    TH = SCENE.ground - SCENE.crownTop;
-    IW = SCENE.w * (mobile ? 0.12 : 0.088);
-    GK = GERM ? GERM.k : 1;
-    BEANY = GERM ? GY + GERM.bean[1] * GK : GY + 20;
-    SEEDH = SEED ? SEED.h : 70;
-
-    motes = []; var mr = rng(950);
-    for (var i = 0; i < (mobile ? 30 : 60); i++) motes.push({ x: mr() * W, y: mr() * H, v: 4 + mr() * 12, s: 0.5 + mr() * 1.4, ph: mr() * 6.28, depth: 0.2 + mr() * 0.6 });
-    leaves = []; var lr = rng(960);
-    for (i = 0; i < (mobile ? 6 : 10); i++) leaves.push({ x: lr() * W, y: lr() * H, v: 18 + lr() * 22, s: 4 + lr() * 4, ph: lr() * 6.28, spin: 0.8 + lr() * 1.6, hue: lr() });
-    birds = []; var br = rng(970);
-    for (i = 0; i < 5; i++) birds.push({ x: br() * W, y: H * (0.1 + br() * 0.25), v: 22 + br() * 18, s: 5 + br() * 4, ph: br() * 6.28 });
-
-    placeIslands();
-    timeline = buildTimeline();
-    section.style.height = (totalUnits * (mobile ? 46 : 40) + 100) + "vh";
+  function worldLayer(out, name, cam, o) {
+    o = o || {};
+    o.pic = name; o.rect = rectOf(name, cam);
+    if (o.alpha == null) o.alpha = 1;
+    if (portrait()) o.feather = 0.03; else o.mirror = true;
+    o.live = true;
+    out.layers.push(o);
+    if (portrait()) out.back.push(backdrop(name, o.bd == null ? o.alpha : o.bd));
+    if (o.alpha > 0.04) out.fx.push({ pic: name, rect: o.rect, a: o.alpha * (o.fxA == null ? 1 : o.fxA), T: o.T == null ? 1 : o.T });
+    return o;
   }
-
-  /* ---------- islands + cards (DOM) ---------- */
-  var islandEls = [], cardsEl = null;
-  function makeIslands() {
-    cardsEl = document.createElement("div");
-    cardsEl.className = "grow-cards";
-    stage.appendChild(cardsEl);
-    STOPS.forEach(function (s, i) {
-      var g = groups.filter(function (x) { return x.id === s.id; })[0];
-      var name = g ? g.name : CHECKED.name, promise = g ? g.promise : CHECKED.promise;
-      var items = g
-        ? services.filter(function (x) { return x.group === s.id && x.status !== "hide"; })
-        : CHECKED.items.map(function (t) { return { name: t, fixed: true }; });
-
-      var el = document.createElement("div"); el.className = "isl";
-      var art = document.createElement("div"); art.className = "isl-art";
-      var glow = document.createElement("div"); glow.className = "isl-glow"; art.appendChild(glow);
-      var bob = document.createElement("div"); bob.className = "isl-bob"; bob.style.animationDelay = (-i * 1.1) + "s";
-      var frames = document.createElement("div"); frames.className = "isl-frames";
-      var img = document.createElement("img"); img.src = s.img; img.alt = s.alt; img.decoding = "async"; img.className = "fa";
-      frames.appendChild(img);
-      (s.frames || []).forEach(function (src, k) {   // extra poses, played as stop-motion
-        var f = document.createElement("img"); f.src = src; f.alt = ""; f.decoding = "async"; f.className = k ? "fc" : "fb";
-        f.onerror = function () { frames.classList.add("no-motion"); };
-        frames.appendChild(f);
-      });
-      if (!(s.frames || []).length) frames.classList.add("no-motion");
-      bob.appendChild(frames); art.appendChild(bob);
-      var puff = document.createElement("div"); puff.className = "isl-puff";
-      for (var k = 0; k < 8; k++) { var p = document.createElement("span"); p.style.setProperty("--a", (k / 8) * 360 + "deg"); puff.appendChild(p); }
-      art.appendChild(puff);
-      el.appendChild(art);
-      world.appendChild(el);
-
-      var card = document.createElement("article"); card.className = "isl-card";
-      card.innerHTML = "<p class='isl-kicker'>Branch " + (i + 1) + " of 5</p><h3></h3><p class='isl-promise'></p><ul class='chips'></ul>";
-      card.querySelector("h3").textContent = name;
-      card.querySelector(".isl-promise").textContent = promise;
-      var ul = card.querySelector(".chips");
-      items.forEach(function (it, k) {
-        var li = document.createElement("li"), soon = it.status === "coming-soon", chip;
-        if (it.fixed) { chip = document.createElement("span"); }
-        else {
-          chip = document.createElement("a");
-          chip.href = wa(soon ? "Hi Bongweb, please tell me when " + it.name + " is available." : "Hi Bongweb, I'm interested in " + it.name + ".");
-          chip.target = "_blank"; chip.rel = "noopener";
-          if (it.gets) chip.title = it.gets;
-        }
-        chip.className = "chip" + (soon ? " chip-soon" : "");
-        chip.style.transitionDelay = (0.2 + k * 0.05) + "s";
-        chip.textContent = it.name;
-        if (soon) { var tag = document.createElement("small"); tag.textContent = "soon"; chip.appendChild(tag); }
-        li.appendChild(chip); ul.appendChild(li);
-      });
-      var cta = document.createElement("a");
-      cta.className = "isl-cta";
-      cta.href = wa(g ? "Hi Bongweb, I'd like help with " + name.toLowerCase() + "." : "Hi Bongweb, I'd like a one-page scope for my project.");
-      cta.target = "_blank"; cta.rel = "noopener";
-      cta.textContent = g ? "Ask about " + name : "Get a one-page scope";
-      card.appendChild(cta);
-      if (cardOnLeft(i)) card.classList.add("on-left");
-      cardsEl.appendChild(card);
-      islandEls.push({ el: el, art: art, card: card, img: img });
-    });
+  function backdrop(name, a) { return { pic: name, rect: coverRect(name, 1.12), alpha: a, blur: 1, dim: 0.8 }; }
+  function closeLayer(out, i, rect, o) {
+    var name = BR[i];
+    o = o || {};
+    o.pic = name; o.rect = rect; o.live = true;
+    if (o.alpha == null) o.alpha = 1;
+    if (portrait()) { o.feather = 0.03; out.back.push(backdrop(name, o.alpha)); }
+    out.layers.push(o);
+    if (o.alpha > 0.04) out.fx.push({ pic: name, rect: rect, a: o.alpha, T: 1 });
+    return o;
   }
-  function islandPos(i) { var a = SCENE.stops[i]; return { x: wx(a[0]), y: wy(a[1]) }; }
-  function cardOnLeft(i) { return SCENE.stops[i][0] > SCENE.base[0]; }
-  function placeIslands() {
-    islandEls.forEach(function (o, i) {
-      var p = islandPos(i);
-      o.art.style.left = p.x + "px"; o.art.style.top = p.y + "px"; o.art.style.width = IW + "px";
-    });
-  }
-
-  /* ---------- scroll timeline ---------- */
-  var timeline = [], totalUnits = 0;
-  function buildTimeline() {
-    var segs = [{ k: "roots", d: 2.4 }, { k: "emerge", d: 1.8 }, { k: "grow", d: 3.8 }];
-    STOPS.forEach(function (_, i) { segs.push({ k: "travel", i: i, d: 0.9 }, { k: "hold", i: i, d: 1.2 }); });
-    segs.push({ k: "reveal", d: 1.3 }, { k: "end", d: 0.8 });
-    var at = 0;
-    segs.forEach(function (s) { s.a = at; at += s.d; });
-    totalUnits = at;
-    return segs;
-  }
-  // world rectangles for the germination photo and its roots
-  function germRect() { return { x: -GERM.bean[0] * GK, y: GY, w: GERM.w * GK, h: GERM.h * GK }; }
-  function rootsBox() { var b = GERM.box; return { x: (b[0] - GERM.bean[0]) * GK, y: GY + b[1] * GK, w: b[2] * GK, h: b[3] * GK }; }
-  function hookX() { return (GERM.hookX - GERM.bean[0]) * GK; }
-  function zCover() { var g = germRect(); return Math.max(W / g.w, H / g.h) * 1.03; }
-  function inGerm(f) {   // keep the camera inside the germination photo while underground
-    var g = germRect(), hw = W / 2 / f.z, hh = H / 2 / f.z;
-    f.x = clamp(f.x, g.x + hw, g.x + g.w - hw); f.y = clamp(f.y, g.y + hh, g.y + g.h - hh);
-    return f;
-  }
-  function camBean() { return inGerm({ x: 0, y: BEANY + 1, z: Math.max(zCover(), Math.min(1.7 / GK, H * 0.36 / (GERM.beanH * GK))) }); }
-  function camRoots() {
-    var b = rootsBox(), z = Math.max(zCover(), Math.min(1.5 / GK, H * 0.86 / b.h));
-    return inGerm({ x: b.x + b.w / 2, y: b.y + b.h * 0.5, z: z });
-  }
-  function camHook() { return inGerm({ x: hookX(), y: GY, z: Math.max(zCover(), 1.25 / GK) }); }
-  function zSeed() { return H * (mobile ? 0.5 : 0.62) / SEEDH; }
-  function camEmerge(f) {   // ground stays near the bottom of the screen while the camera pulls back
-    var z = Math.exp(lerp(Math.log(camHook().z), Math.log(zSeed()), ease(f)));
-    return { x: lerp(hookX(), 0, ease(f)), y: GY - H * 0.36 / z, z: z };
-  }
-  // heights (landscape px) of each growth stage, and how the stages hand over
-  function growStages(f) {
-    var hs = [SEEDH].concat(SAPS.map(function (p) { return p.h; })).concat([TH]);
-    var n = hs.length - 1, pos = f * n, i = Math.min(n - 1, Math.floor(pos)), u = pos - i;
-    var h = Math.exp(lerp(Math.log(hs[i]), Math.log(hs[i + 1]), smooth(u)));     // the plant keeps growing
-    var out = { h: h, seedA: 0, seedScale: 1, saps: [], treeA: 0, s: 1, T: 1 };
-    function fadeIn(k) { return smooth(clamp((pos - (k - 0.55)) / 0.4, 0, 1)); }    // stage k takes over around pos = k - 0.35
-    var w = [];
-    for (var k = 0; k <= n; k++) w.push(k === 0 ? 1 : fadeIn(k));
-    for (k = 0; k < n; k++) w[k] = w[k] * (1 - w[k + 1]);
-    out.seedA = w[0]; out.seedScale = h / SEEDH;
-    for (k = 0; k < SAPS.length; k++) out.saps.push({ a: w[k + 1], sc: h / SAPS[k].h });
-    out.treeA = w[n]; out.s = clamp(h / TH, 0.05, 1);
-    out.T = lerp(0.62, 1, smooth(clamp((pos - (n - 0.6)) / 0.6, 0, 1)));
-    return out;
-  }
-  function camPlant(h) { return { x: 0, y: GY - h * 0.5, z: clamp(H * (mobile ? 0.5 : 0.64) / h, 0.2, zSeed()) }; }
-  function treeVisible(s, T) { return TH * s * clamp(0.16 + T * 0.95, 0.16, 1); }
-  function camTree(s, T) {
-    var vh = treeVisible(s, T);
-    return { x: 0, y: GY - vh * 0.5, z: clamp(H * (mobile ? 0.5 : 0.64) / vh, 0.2, zSeed()) };
-  }
-  var cardBox = [];
-  function measureCards() { cardBox = islandEls.map(function (o) { return { w: o.card.offsetWidth, h: o.card.offsetHeight }; }); }
-  function stacked() { return W < 760; }   // narrow screens: the card sits below the island
-  function islandAspect(i) { var im = islandEls[i] && islandEls[i].img; return im && im.naturalWidth ? im.naturalHeight / im.naturalWidth : 1.06; }
-  function freeRect(i) {
-    if (!cardBox.length) measureCards();
-    var head = 72, gap = 24, cb = cardBox[i] || { w: 360, h: 420 }, side = Math.max(20, (W - 1180) / 2);
-    if (stacked()) return { x0: 12, x1: W - 12, y0: head + 10, y1: H - cb.h - 16 - gap };
-    if (cardOnLeft(i)) return { x0: side + cb.w + gap, x1: W - gap, y0: head + gap, y1: H - gap };
-    return { x0: gap, x1: W - side - cb.w - gap, y0: head + gap, y1: H - gap };
-  }
-  function islandFocus(i, h) {
-    var p = islandPos(i), r = freeRect(i), asp = islandAspect(i);
-    var fw = Math.max(90, r.x1 - r.x0), fh = Math.max(90, r.y1 - r.y0);
-    var z = Math.min(fw * 0.84 / IW, fh * 0.84 / (IW * asp), mobile ? 1.7 : 1.9);
-    z *= 1 + 0.035 * Math.sin(h * PI);                                     // a slow push in and out
-    var cx = p.x, cy = p.y - IW * asp * 0.5;                               // centre of the island
-    var drift = (h - 0.5) * Math.min(22, fw * 0.04) * (i % 2 ? 1 : -1);    // small drift that stays clear of the card
-    var sx = (r.x0 + r.x1) / 2 + drift, sy = (r.y0 + r.y1) / 2;
-    return { x: cx - (sx - W / 2) / z, y: cy - (sy - H / 2) / z, z: z };
-  }
-  function revealFocus() {   // the whole tree and its islands, centred below the header
-    var top = -TH + GY;
-    for (var i = 0; i < STOPS.length; i++) top = Math.min(top, islandPos(i).y - IW * 1.1);
-    top -= 16;
-    var bot = GY + (mobile ? 160 : 120), cx = wx((SCENE.crownLeft + SCENE.crownRight) / 2), head = 72, z;
-    if (mobile) z = Math.min((H - head - 24) / (bot - top), W * 1.08 / (SCENE.crownRight - SCENE.crownLeft + IW));
-    else z = Math.max(W / SCENE.w * 1.005, Math.min((H - head) / (bot - top), W * 0.98 / (SCENE.crownRight - SCENE.crownLeft + IW * 1.25), 1.1));
-    return { x: cx, y: (top + bot) / 2 - (head / 2) / z, z: z };
-  }
-  function keepInPhoto(f) {   // never show past the edges of the photo
-    f.z = Math.max(f.z, W / SCENE.w * 1.002);
-    var half = W / 2 / f.z, L = wx(0), R = wx(SCENE.w);
-    f.x = R - L > half * 2 ? clamp(f.x, L + half, R - half) : (L + R) / 2;
-    return f;   // above the photo the sky continues in the same deep blue, so no limit upward
-  }
+  function treeBlur(cam) { return clamp((cam.z / camK(K.tree).z - 1.7) / 2.2, 0, 0.3); }
 
   function stateAt(u) {
-    var st = { rootT: 1, seedT: 1, seedA: 0, seedScale: 1, saps: [], germA: 0, treeA: 1, treeT: 1, s: 1, end: 0, active: -1, shown: [1, 1, 1, 1, 1], focus: null };
-    for (var n = 0; n < timeline.length; n++) {
-      var s = timeline[n];
-      if (u < s.a) break;
-      var f = clamp((u - s.a) / s.d, 0, 1);
-      st.active = -1;
-      if (s.k === "roots") {
-        st.rootT = lerp(0.06, 1, smooth(f)); st.seedT = 0; st.seedA = 0; st.germA = 1; st.treeT = 0; st.s = 0; st.shown = [0, 0, 0, 0, 0];
-        st.focus = f < 0.62 ? mixF(camBean(), camRoots(), ease(f / 0.62)) : mixF(camRoots(), camHook(), ease((f - 0.62) / 0.38));
-      } else if (s.k === "emerge") {
-        st.seedT = smooth(clamp((f - 0.04) / 0.92, 0, 1)); st.seedA = 1; st.treeT = 0; st.s = 0; st.shown = [0, 0, 0, 0, 0];
-        st.germA = 1;
-        st.focus = f < 0.12 ? mixF(camHook(), camEmerge(0), ease(f / 0.12)) : camEmerge((f - 0.12) / 0.88);
-      } else if (s.k === "grow") {
-        st.germA = 1; st.shown = [0, 0, 0, 0, 0]; st.seedT = 1;
-        var g = growStages(f);
-        st.seedA = g.seedA; st.seedScale = g.seedScale; st.saps = g.saps; st.treeA = g.treeA; st.s = g.s; st.treeT = g.T;
-        var tf = camPlant(g.h);
-        st.focus = f < 0.12 ? mixF(camEmerge(1), tf, ease(f / 0.12)) : tf;
-      } else if (s.k === "travel") {
-        for (var j = s.i; j < 5; j++) st.shown[j] = 0;
-        st.focus = mixF(s.i === 0 ? camTree(1, 1) : islandFocus(s.i - 1, 1), islandFocus(s.i, 0), ease(f));
-        if (f > 0.7) st.shown[s.i] = 1;
-      } else if (s.k === "hold") {
-        for (j = s.i + 1; j < 5; j++) st.shown[j] = 0;
-        st.focus = islandFocus(s.i, ease(f));
-        st.active = s.i;
-      } else if (s.k === "reveal") {
-        st.focus = mixF(islandFocus(4, 1), revealFocus(), ease(f));
-        st.end = clamp((f - 0.7) / 0.3, 0, 1);
-      } else if (s.k === "end") {
-        var rf = revealFocus(); rf.z *= 1 - f * 0.02; st.focus = rf; st.end = 1;
+    var s = SEGS[SEGS.length - 1];
+    for (var n = 0; n < SEGS.length; n++) if (u < SEGS[n].a + SEGS[n].d) { s = SEGS[n]; break; }
+    var f = clamp((u - s.a) / s.d, 0, 1), i = s.i;
+    var out = { back: [], layers: [], fx: [], k: s.k };
+    var cam, d, T, e1, dOut, dIn, k, fly;
+    switch (s.k) {
+      case "seed":
+        cam = mixCam(camK(K.seedA), camK(K.seedB), ease(f));
+        worldLayer(out, "seed", cam, { T: lerp(0.03, 1, smooth(seg(f, 0.08, 0.9))), reveal: true, withPlate: true });
+        break;
+      case "sprout":   // the seed cracks open (dissolve), then the sprout grows out of it
+        d = smooth(seg(f, 0.04, 0.34));
+        cam = f < 0.34 ? mixCam(camK(K.seedB), camK(K.shell), ease(seg(f, 0, 0.34))) : mixCam(camK(K.shell), camK(K.sprout), ease(seg(f, 0.34, 0.96)));
+        T = smooth(seg(f, 0.3, 0.9));
+        worldLayer(out, "sprout", cam, { T: T, reveal: true, withPlate: true, blur: (1 - d) * 0.5, bd: 1, fxA: d });
+        if (d < 1) worldLayer(out, "seed", cam, { T: 1, reveal: true, alpha: 1 - d, blur: 0.12 + d * 0.55 });
+        break;
+      case "young":    // the young tree grows out of the sprout: trunk, branches, leaves, then the sky
+        T = smooth(seg(f, 0, 0.88));
+        cam = mixCam(camK(K.sprout), camK(K.young), ease(f));
+        worldLayer(out, "sprout", cam, { T: 1, reveal: true, fxA: 1 - T });
+        worldLayer(out, "young", cam, { T: T, reveal: true, rim: 1, bd: T, fxA: T });
+        break;
+      case "tree":     // ...and the giant tree grows out of the young one
+        T = smooth(seg(f, 0, 0.88));
+        cam = mixCam(camK(K.young), camK(K.tree), ease(f));
+        worldLayer(out, "young", cam, { T: 1, reveal: true, fxA: 1 - T });
+        worldLayer(out, "tree", cam, { T: T, reveal: true, rim: 1, bd: T, fxA: T });
+        break;
+      case "full":
+        cam = camK(K.tree); cam.z *= 1 + 0.02 * smooth(f); cam = fit(cam, "tree");
+        worldLayer(out, "tree", cam);
+        break;
+      case "dive": {   // into tree house i: (back out of the last picture,) fly there, dissolve into its picture
+        var name = BR[i], prev = i ? BR[i - 1] : null;
+        e1 = 1; dOut = 1;
+        if (!prev) {
+          fly = ease(seg(f, 0, 0.66)); dIn = smooth(seg(f, 0.5, 0.78)); k = ease(seg(f, 0.74, 1));
+          cam = mixCam(camK(K.tree), camHouse(0), fly);
+        } else {
+          e1 = ease(seg(f, 0, 0.16)); dOut = smooth(seg(f, 0.12, 0.32));
+          fly = ease(seg(f, 0.28, 0.7)); dIn = smooth(seg(f, 0.6, 0.82)); k = ease(seg(f, 0.78, 1));
+          cam = hopCam(camHouse(i - 1), camHouse(i), fly, 0.45);
+          cam.z *= lerp(1.16, 1, dOut);
+        }
+        cam.z *= lerp(1, 1.22, dIn);   // keep pushing in while the tree house dissolves into its picture
+        cam = fit(cam, "tree");
+        if (dOut > 0 && k <= 0) {
+          var tb = treeBlur(cam) + 0.45 * Math.sin(PI * dIn) + (prev ? 0.45 * Math.sin(PI * dOut) : 0);
+          worldLayer(out, "tree", cam, { blur: tb });
+        }
+        if (prev && dOut < 1) closeLayer(out, i - 1, closeRect(i - 1, 1, lerp(1, 1.1, e1)), { alpha: 1 - dOut, blur: dOut * 0.6 });
+        if (dIn > 0) closeLayer(out, i, closeRect(i, 0, lerp(1.16, 1, k)), { alpha: dIn, blur: (1 - dIn) * 0.6 });
+        break;
+      }
+      case "hold":
+        closeLayer(out, i, closeRect(i, f, 1));
+        break;
+      case "outro": {  // back out of the last tree house to the whole tree
+        var last = BR.length - 1;
+        e1 = ease(seg(f, 0, 0.16)); dOut = smooth(seg(f, 0.12, 0.4));
+        cam = mixCam(camHouse(last), camK(K.tree), ease(seg(f, 0.32, 1)));
+        cam.z *= lerp(1.16, 1, dOut); cam = fit(cam, "tree");
+        if (dOut > 0) worldLayer(out, "tree", cam, { blur: treeBlur(cam) + 0.45 * Math.sin(PI * dOut) });
+        if (dOut < 1) closeLayer(out, last, closeRect(last, 1, lerp(1, 1.1, e1)), { alpha: 1 - dOut, blur: dOut * 0.6 });
+        break;
+      }
+      default:   // end: the whole tree
+        cam = camK(K.tree); cam.z *= 1 + 0.025 * smooth(f); cam = fit(cam, "tree");
+        worldLayer(out, "tree", cam);
+    }
+    return out;
+  }
+
+  /* ---------- light and air (2D canvas above the pictures) ---------- */
+  function sprite(size, paint) { var c = makeCanvas(size, size); paint(c.getContext("2d"), size); return c; }
+  var GLOW = sprite(128, function (x, s) {
+    var g = x.createRadialGradient(s / 2, s / 2, 0, s / 2, s / 2, s / 2);
+    g.addColorStop(0, "rgba(255,226,170,0.95)"); g.addColorStop(0.25, "rgba(255,196,120,0.45)"); g.addColorStop(1, "rgba(255,170,90,0)");
+    x.fillStyle = g; x.fillRect(0, 0, s, s);
+  });
+  var WHITE = sprite(128, function (x, s) {
+    var g = x.createRadialGradient(s / 2, s / 2, 0, s / 2, s / 2, s / 2);
+    g.addColorStop(0, "rgba(255,255,255,1)"); g.addColorStop(0.3, "rgba(255,252,240,0.5)"); g.addColorStop(1, "rgba(255,250,235,0)");
+    x.fillStyle = g; x.fillRect(0, 0, s, s);
+  });
+  var STAR = sprite(128, function (x, s) {
+    var c = s / 2;
+    for (var k = 0; k < 2; k++) {
+      x.save(); x.translate(c, c); x.rotate(k * PI / 2 + PI / 4 * 0);
+      var g = x.createLinearGradient(-c, 0, c, 0);
+      g.addColorStop(0, "rgba(255,255,255,0)"); g.addColorStop(0.5, "rgba(255,255,250,0.95)"); g.addColorStop(1, "rgba(255,255,255,0)");
+      x.fillStyle = g; x.beginPath(); x.ellipse(0, 0, c, c * 0.045, 0, 0, PI * 2); x.fill(); x.restore();
+    }
+    var r = x.createRadialGradient(c, c, 0, c, c, c * 0.32);
+    r.addColorStop(0, "rgba(255,255,255,1)"); r.addColorStop(1, "rgba(255,255,255,0)");
+    x.fillStyle = r; x.fillRect(0, 0, s, s);
+  });
+  var BOKEH = sprite(96, function (x, s) {
+    var g = x.createRadialGradient(s / 2, s / 2, s * 0.3, s / 2, s / 2, s / 2);
+    g.addColorStop(0, "rgba(255,236,190,0.55)"); g.addColorStop(0.85, "rgba(255,236,190,0.75)"); g.addColorStop(1, "rgba(255,236,190,0)");
+    x.fillStyle = g; x.beginPath(); x.arc(s / 2, s / 2, s / 2, 0, PI * 2); x.fill();
+  });
+  var LEAVES = [];
+  var vignette = null;
+
+  var air = { motes: [], bokeh: [], leaves: [] };
+  function buildAir() {
+    var r = rng(77), m = Math.min(1, W * H / (1440 * 900));
+    air.motes = []; air.bokeh = []; air.leaves = [];
+    for (var i = 0; i < Math.round(26 + 34 * m); i++) air.motes.push({ x: r() * W, y: r() * H, v: 5 + r() * 12, s: 0.6 + r() * 1.4, ph: r() * 6.28 });
+    for (i = 0; i < Math.round(8 + 8 * m); i++) air.bokeh.push({ x: r() * W, y: r() * H, v: 2 + r() * 5, s: 10 + r() * 34, ph: r() * 6.28, a: 0.25 + r() * 0.5 });
+    for (i = 0; i < Math.round(3 + 5 * m); i++) air.leaves.push({ x: r() * W, y: r() * H * 1.4 - H * 0.4, v: 26 + r() * 30, s: 15 + r() * 13, ph: r() * 6.28, spin: 0.7 + r() * 1.3, img: i % 3 });
+    vignette = makeCanvas(Math.max(2, Math.round(W / 4)), Math.max(2, Math.round(H / 4)));
+    var vx = vignette.getContext("2d"), vw = vignette.width, vh = vignette.height;
+    var g = vx.createRadialGradient(vw / 2, vh * 0.48, Math.min(vw, vh) * 0.35, vw / 2, vh / 2, Math.hypot(vw, vh) * 0.62);
+    g.addColorStop(0, "rgba(16,10,4,0)"); g.addColorStop(1, "rgba(16,10,4,0.32)");
+    vx.fillStyle = g; vx.fillRect(0, 0, vw, vh);
+  }
+
+  function pulse(t, period, d) { return ((t + (d || 0)) % period + period) % period / period; }
+  function drawBeams(b, rect, a, t) {
+    var k = rect.w / PW, sx = rect.x + b.x * k, sy = rect.y + b.y * k, len = b.len * k;
+    fx.save(); fx.globalCompositeOperation = "lighter";
+    for (var j = 0; j < 5; j++) {
+      var ang = b.ang + (j - 2) * b.spread * 0.24 + Math.sin(t * 0.11 + j * 1.7) * 0.02;
+      var al = a * b.a * (0.5 + 0.5 * Math.sin(t * 0.33 + j * 2.1));
+      for (var layer = 1; layer <= 3; layer++) {
+        var w = (0.018 + 0.012 * (j % 3)) * layer;
+        var g = fx.createLinearGradient(sx, sy, sx + Math.cos(ang) * len, sy + Math.sin(ang) * len);
+        g.addColorStop(0, "rgba(" + b.tint + "," + (al / 3).toFixed(3) + ")"); g.addColorStop(1, "rgba(" + b.tint + ",0)");
+        fx.fillStyle = g; fx.beginPath(); fx.moveTo(sx, sy);
+        fx.lineTo(sx + Math.cos(ang - w) * len, sy + Math.sin(ang - w) * len);
+        fx.lineTo(sx + Math.cos(ang + w) * len, sy + Math.sin(ang + w) * len);
+        fx.closePath(); fx.fill();
       }
     }
-    return st;
+    fx.restore();
   }
-
-  /* ---------- camera + drawing ---------- */
-  var cam = { x: 0, y: 0, z: 1 };
-  function SX(x) { return (x - cam.x) * cam.z + W / 2; }
-  function SY(y) { return (y - cam.y) * cam.z + H / 2; }
-  function photo(img, sx, sy, sw, sh, x, y, w, h, alpha) {
-    if (!img || alpha <= 0.002) return;
-    var X = SX(x), Y = SY(y), Wd = w * cam.z, Hd = h * cam.z;
-    if (X > W || Y > H || X + Wd < 0 || Y + Hd < 0) return;
-    ctx.globalAlpha = alpha;
-    ctx.drawImage(img, sx, sy, sw, sh, X, Y, Wd, Hd);
-    ctx.globalAlpha = 1;
-  }
-  function full(img, x, y, w, h, alpha) { if (img) photo(img, 0, 0, img.width, img.height, x, y, w, h, alpha); }
-
-  function drawScene(st) {
-    var z = cam.z, w = SCENE.w, gl = SCENE.ground, ext = SCENE.skyExt || 0;
-    var g = ctx.createLinearGradient(0, SY(wy(-ext)), 0, SY(GY));
-    g.addColorStop(0, SCENE.skyTop); g.addColorStop(1, SCENE.skyLow);
-    ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
-    var blur = clamp((z - 1.6) / 1.4, 0, 1);
-    var rowsP = ext + gl + 30;
-    if (blur < 1 && IMG.plate) photo(IMG.plate, 0, 0, w, rowsP, wx(0), wy(-ext), w, rowsP, 1);
-    if (IMG.plateBlur) { var pb = IMG.plateBlur.width / w; photo(IMG.plateBlur, 0, 0, w * pb, rowsP * pb, wx(0), wy(-ext), w, rowsP, blur < 1 ? blur : 1); }
-    var top = SY(GY);
-    if (top >= H) return;
-    ctx.fillStyle = SCENE.soilDeep; ctx.fillRect(0, Math.max(0, top + 20), W, H);
-    var sh = IMG.soil ? w * IMG.soil.height / IMG.soil.width : w * 0.5625;
-    // plain soil (always), then the germination photo on top while the bean is the story
-    if (blur < 1) full(IMG.soil, wx(0), GY, w, sh, 1);
-    full(IMG.soilBlur, wx(0), GY, w, sh, blur < 1 ? blur : 1);
-    var gr = germRect(), zc = W / (gr.w * 5);
-    var germA = st.germA * clamp((z - zc * 1.03) / (zc * 0.6), 0, 1);   // real close-up ground until it no longer fills the screen
-    if (germA > 0 && IMG.germ) {
-      if (IMG.soil) for (var side = -2; side <= 2; side++) {   // plain soil either side, alternately mirrored
-        if (!side) continue;
-        var X0 = SX(gr.x + side * gr.w), Y0 = SY(gr.y), Wd = gr.w * z, Hd = gr.h * z;
-        if (X0 + Wd < 0 || X0 > W) continue;
-        ctx.save(); ctx.globalAlpha = germA; ctx.translate(X0 + Wd / 2, Y0); ctx.scale(side % 2 ? -1 : 1, 1);
-        ctx.drawImage(IMG.soil, -Wd / 2, 0, Wd, Hd); ctx.restore();
+  function drawPicFx(e, t) {
+    var c = PICS[e.pic], rect = e.rect, k = rect.w / PW, a = e.a;
+    if (a <= 0.02) return;
+    if (c.beams && !reduceMotion) drawBeams(c.beams, rect, a, t);
+    fx.globalCompositeOperation = "lighter";
+    (c.fx || []).forEach(function (q) {
+      if (q.after != null && e.T < q.after) return;
+      var x = rect.x + q.x * k, y = rect.y + q.y * k, r = q.r * k, p, s;
+      if (x < -r * 4 || y < -r * 4 || x > W + r * 4 || y > H + r * 4) return;
+      switch (q.t) {
+        case "lamp":
+          s = reduceMotion ? 1 : 0.86 + 0.08 * Math.sin(t * 7.3 + (q.d || 0) * 5) + 0.06 * Math.sin(t * 13.1 + (q.d || 0) * 3);
+          fx.globalAlpha = a * (q.a || 0.42) * s;
+          fx.drawImage(GLOW, x - r * 3, y - r * 3, r * 6, r * 6);
+          break;
+        case "glint":
+          p = pulse(t, 3.4, q.d); s = reduceMotion ? 0.5 : Math.pow(Math.max(0, Math.sin(p * PI * 2)), 6);
+          if (s < 0.02) break;
+          fx.globalAlpha = a * s * 0.9;
+          var R2 = r * (1.6 + s * 1.6);
+          fx.save(); fx.translate(x, y); fx.rotate(0.3 + p * 0.6); fx.drawImage(STAR, -R2, -R2, R2 * 2, R2 * 2); fx.restore();
+          break;
+        case "tick":
+          p = pulse(t, 3.0, -(q.d || 0)); s = reduceMotion ? 0 : (p < 0.08 ? p / 0.08 : Math.max(0, 1 - (p - 0.08) / 0.3));
+          if (s < 0.02) break;
+          fx.globalAlpha = a * s * 0.55; fx.drawImage(WHITE, x - r * 2, y - r * 2, r * 4, r * 4);
+          break;
+        case "pop":
+          p = pulse(t, 2.8, q.d); s = 1 - p;
+          fx.globalAlpha = a * 0.3 * (0.6 + 0.4 * Math.sin(t * 3)); fx.drawImage(WHITE, x - r * 2.2, y - r * 2.2, r * 4.4, r * 4.4);
+          if (reduceMotion) break;
+          fx.globalCompositeOperation = "source-over";
+          fx.globalAlpha = a * 0.55 * s * s; fx.strokeStyle = "rgba(240,255,235,1)"; fx.lineWidth = Math.max(1, 2 * k);
+          fx.beginPath(); fx.arc(x, y, r * (1.05 + p * 1.5), 0, PI * 2); fx.stroke();
+          fx.globalCompositeOperation = "lighter";
+          break;
+        case "flash":
+          p = pulse(t, 3.8, q.d) * 3.8; s = reduceMotion ? 0 : (p < 0.06 ? p / 0.06 : Math.exp(-(p - 0.06) * 7));
+          if (s < 0.01) break;
+          fx.globalAlpha = a * s; fx.drawImage(WHITE, x - r * (1 + s), y - r * (1 + s), r * 2 * (1 + s), r * 2 * (1 + s));
+          fx.globalAlpha = a * s * 0.07; fx.fillStyle = "#fff8ee";
+          fx.fillRect(Math.max(0, rect.x), Math.max(0, rect.y), Math.min(W, rect.x + rect.w) - Math.max(0, rect.x), Math.min(H, rect.y + rect.h) - Math.max(0, rect.y));
+          break;
+        case "steam":
+          if (reduceMotion) break;
+          for (var j = 0; j < 5; j++) {
+            p = pulse(t * 0.3, 1, j / 5);
+            var sx = x + Math.sin(p * 5 + j * 1.3) * 7 * k, sy = y - p * 75 * k, sr = (5 + p * 16) * k;
+            fx.globalAlpha = a * Math.sin(p * PI) * 0.16;
+            fx.drawImage(WHITE, sx - sr, sy - sr, sr * 2, sr * 2);
+          }
+          break;
       }
-      full(IMG.germ, gr.x, gr.y, gr.w, gr.h, germA);
-      if (REV.roots) {
-        REV.roots.render(st.rootT);
-        var b = rootsBox();
-        full(REV.roots.canvas, b.x, b.y, b.w, b.h, germA);
-      }
-    }
-    var fy = SY(GY + sh);
-    if (fy < H + 240 * z) {
-      var fg = ctx.createLinearGradient(0, fy - 200 * z, 0, fy);
-      fg.addColorStop(0, "rgba(35,22,13,0)"); fg.addColorStop(1, SCENE.soilDeep);
-      ctx.fillStyle = fg; ctx.fillRect(0, fy - 200 * z, W, 200 * z + 2);
-    }
+    });
+    fx.globalAlpha = 1; fx.globalCompositeOperation = "source-over";
   }
-
-  function drawPlant(img, aspect, baseX, h, alpha, sway) {
-    if (!img || alpha <= 0.003) return;
-    ctx.save();
-    ctx.translate(SX(0), SY(GY + h * 0.02));
-    ctx.rotate(sway);
-    ctx.globalAlpha = alpha;
-    var Hd = h * cam.z, Wd = Hd * aspect;
-    ctx.drawImage(img, -Wd * baseX, -Hd, Wd, Hd);
-    ctx.restore();
-  }
-  function drawSaplings(st, t) {
-    for (var k = 0; k < SAPS.length; k++) {
-      var p = SAPS[k], v = st.saps[k];
-      if (!v || v.a <= 0.003) continue;
-      drawPlant(IMG["sap" + k], p.aspect, p.baseX, p.h * v.sc, v.a, reduceMotion ? 0 : Math.sin(t * 0.9 + k) * 0.006);
-    }
-  }
-  function drawSeedling(st, t) {
-    if (st.seedA <= 0 || !REV.seed || !SEED) return;
-    REV.seed.render(st.seedT);
-    var h = SEEDH * lerp(0.86, 1, st.seedT) * (st.seedScale || 1), w = h * SEED.aspect;
-    var sway = reduceMotion ? 0 : Math.sin(t * 1.2) * 0.012;
-    ctx.save();
-    ctx.translate(SX(0), SY(GY + h * 0.03));
-    ctx.rotate(sway);
-    ctx.globalAlpha = st.seedA;
-    var Wd = w * cam.z, Hd = h * cam.z;
-    ctx.drawImage(REV.seed.canvas, -Wd * SEED.baseX, -Hd, Wd, Hd);
-    ctx.restore();
-  }
-
-  function drawTree(st) {
-    if (st.s <= 0 || !REV.tree || st.treeA <= 0.003) return;
-    REV.tree.render(st.treeT);
-    var s = st.s, c = SCENE.cut;
-    full(REV.tree.canvas, wx(c[0]) * s, GY + (wy(c[1]) - GY) * s, c[2] * s, c[3] * s, st.treeA);
-  }
-
-  var lastCam = null;
   function drawAir(dt, t, st) {
-    var dX = lastCam ? (cam.x - lastCam.x) * cam.z : 0, dY = lastCam ? (cam.y - lastCam.y) * cam.z : 0;
-    lastCam = { x: cam.x, y: cam.y };
-    var ground = SY(GY), i;
-    for (i = 0; i < motes.length; i++) {   // pollen in the sunlight
-      var m = motes[i];
-      if (!reduceMotion) { m.y -= m.v * dt; m.x += Math.sin(t * 0.5 + m.ph) * 8 * dt; }
-      m.x -= dX * m.depth; m.y -= dY * m.depth;
-      if (m.y < -20) m.y += H + 40; if (m.y > H + 20) m.y -= H + 40;
-      if (m.x < -20) m.x += W + 40; if (m.x > W + 20) m.x -= W + 40;
-      if (m.y > ground) continue;
-      var R = 4 * m.s;
-      ctx.globalAlpha = 0.3 + 0.35 * (reduceMotion ? 0.5 : 0.5 + 0.5 * Math.sin(t * 1.6 + m.ph));
-      ctx.drawImage(MOTE, m.x - R, m.y - R, R * 2, R * 2);
+    var wB = 0, wL = 0;
+    st.fx.forEach(function (e) { var kind = PICS[e.pic].air; if (kind === "bokeh") wB = Math.max(wB, e.a); else wL = Math.max(wL, e.a); });
+    var still = reduceMotion, i;
+    if (wB > 0.02) {
+      fx.globalCompositeOperation = "lighter";
+      for (i = 0; i < air.bokeh.length; i++) {
+        var b = air.bokeh[i];
+        if (!still) { b.y -= b.v * dt; b.x += Math.sin(t * 0.2 + b.ph) * 4 * dt; }
+        if (b.y < -60) { b.y = H + 60; b.x = Math.random() * W; }
+        fx.globalAlpha = wB * b.a * 0.16 * (0.7 + 0.3 * Math.sin(t * 0.7 + b.ph));
+        fx.drawImage(BOKEH, b.x - b.s, b.y - b.s, b.s * 2, b.s * 2);
+      }
     }
-    ctx.globalAlpha = 1;
-    if (st.treeT < 0.9 || reduceMotion) return;
-    for (i = 0; i < leaves.length; i++) {   // a few leaves falling from the crown
-      var l = leaves[i];
-      l.y += l.v * dt - dY * 0.6; l.x += Math.sin(t * 1.2 + l.ph) * 22 * dt - dX * 0.6;
-      if (l.y > H + 20) { l.y = -20; l.x = Math.random() * W; }
-      if (l.y < -40) l.y += H + 60;
-      if (l.x < -30) l.x += W + 60; if (l.x > W + 30) l.x -= W + 60;
-      if (l.y > ground) continue;
-      ctx.save(); ctx.translate(l.x, l.y); ctx.rotate(Math.sin(t * l.spin + l.ph) * 1.2); ctx.scale(1, 0.55 + 0.45 * Math.cos(t * l.spin * 1.7 + l.ph));
-      ctx.fillStyle = l.hue < 0.5 ? "#7fae3c" : "#a3c955";
-      ctx.beginPath(); ctx.ellipse(0, 0, l.s, l.s * 0.5, 0, 0, PI * 2); ctx.fill();
-      ctx.restore();
+    fx.globalCompositeOperation = "lighter";
+    for (i = 0; i < air.motes.length; i++) {   // pollen and dust in the sunlight
+      var m = air.motes[i];
+      if (!still) { m.y -= m.v * dt; m.x += Math.sin(t * 0.5 + m.ph) * 9 * dt; }
+      if (m.y < -10) { m.y = H + 10; m.x = Math.random() * W; }
+      if (m.x < -10) m.x += W + 20; if (m.x > W + 10) m.x -= W + 20;
+      var R2 = 3.2 * m.s;
+      fx.globalAlpha = 0.26 + 0.3 * (still ? 0.5 : 0.5 + 0.5 * Math.sin(t * 1.7 + m.ph));
+      fx.drawImage(WHITE, m.x - R2, m.y - R2, R2 * 2, R2 * 2);
     }
-    ctx.strokeStyle = "rgba(34,42,54,0.7)"; ctx.lineCap = "round"; ctx.lineJoin = "round"; ctx.lineWidth = 1.4;
-    for (i = 0; i < birds.length; i++) {   // birds crossing the sky
-      var b = birds[i];
-      b.x += b.v * dt - dX * 0.3; b.y -= dY * 0.3;
-      if (b.x > W + 40) { b.x = -40; b.y = H * (0.08 + Math.random() * 0.25); }
-      if (b.y < -20 || b.y > Math.min(H, ground)) continue;
-      var flap = Math.sin(t * 8 + b.ph) * b.s * 0.5;
-      ctx.beginPath(); ctx.moveTo(b.x - b.s, b.y - flap); ctx.quadraticCurveTo(b.x - b.s * 0.4, b.y - flap * 0.2, b.x, b.y); ctx.quadraticCurveTo(b.x + b.s * 0.4, b.y - flap * 0.2, b.x + b.s, b.y - flap); ctx.stroke();
+    fx.globalCompositeOperation = "source-over";
+    if (wL > 0.05 && !still && LEAVES.length) {   // a few leaves let go and drift down
+      for (i = 0; i < air.leaves.length; i++) {
+        var l = air.leaves[i], im = LEAVES[l.img % LEAVES.length];
+        l.y += l.v * dt; l.x += (Math.sin(t * 1.1 + l.ph) * 30 + 10) * dt;
+        if (l.y > H + 40) { l.y = -40 - Math.random() * H * 0.5; l.x = Math.random() * W; }
+        if (l.x > W + 40) l.x -= W + 80;
+        fx.save(); fx.globalAlpha = wL * 0.92;
+        fx.translate(l.x, l.y); fx.rotate(Math.sin(t * l.spin + l.ph) * 1.1 + l.ph);
+        fx.scale(1, 0.35 + 0.65 * Math.abs(Math.cos(t * l.spin * 1.6 + l.ph)));
+        var lw = l.s, lh = l.s * im.height / im.width;
+        fx.drawImage(im, -lw / 2, -lh / 2, lw, lh);
+        fx.restore();
+      }
     }
-  }
-
-  function draw(st, t, dt) {
-    ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
-    ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = "high";
-    drawScene(st);
-    drawSeedling(st, t);
-    drawSaplings(st, t);
-    drawTree(st);
-    drawAir(dt, t, st);
+    fx.globalAlpha = 1;
   }
 
   /* ---------- wiring ---------- */
-  var endEl = section.querySelector(".grow-end");
   var hintEl = section.querySelector(".grow-hint");
-  var target = 0, current = 0, shown = [];
-
+  var target = 0, current = 0, needPic = function () {};
   function readScroll() {
     var rect = section.getBoundingClientRect();
     var total = section.offsetHeight - window.innerHeight;
-    var p = total > 0 ? clamp(-rect.top / total, 0, 1) : 0;
-    target = p * totalUnits;
+    target = (total > 0 ? clamp(-rect.top / total, 0, 1) : 0) * totalUnits;
   }
   function resize() {
     W = stage.clientWidth; H = stage.clientHeight;
     if (!W || !H) return;
-    DPR = Math.min(window.devicePixelRatio || 1, W < 720 ? 1.5 : 2);
+    // the pictures are 1672 px wide, so beyond ~3 million canvas pixels a sharper canvas shows nothing new
+    DPR = Math.min(window.devicePixelRatio || 1, 2, Math.sqrt(3.2e6 / (W * H)));
     canvas.width = Math.round(W * DPR); canvas.height = Math.round(H * DPR);
-    build();
-    measureCards();
+    fxCanvas.width = Math.round(W * DPR); fxCanvas.height = Math.round(H * DPR);
+    if (R) R.resize();
+    section.style.height = (totalUnits * (portrait() ? 40 : 36) + 100) + "vh";
+    buildAir();
     readScroll();
   }
 
   var visible = true;
   if ("IntersectionObserver" in window) new IntersectionObserver(function (e) { visible = e[0].isIntersecting; }).observe(section);
 
-  var last = performance.now(), t = 0, first = true;
+  var params = new URLSearchParams(location.search);
+  var pinU = parseFloat(params.get("grow")), pinT = parseFloat(params.get("t")), noFx = params.get("fx") === "0";
+  var last = performance.now(), first = true;
   function frame(now) {
     requestAnimationFrame(frame);
     var dt = Math.min((now - last) / 1000, 0.05); last = now;
-    if ((!visible && !first) || !W || !ready) return;
-    if (!reduceMotion) t += dt;
-    current = reduceMotion || first ? target : current + (target - current) * (1 - Math.exp(-dt * 6));
-    var st = stateAt(current);
-    if (st.s > 0 || st.seedT > 0.5) keepInPhoto(st.focus);
-    var k = reduceMotion || first ? 1 : 1 - Math.exp(-dt * 4.5);
-    cam.x += (st.focus.x - cam.x) * k; cam.y += (st.focus.y - cam.y) * k;
-    cam.z = Math.exp(Math.log(cam.z) + (Math.log(st.focus.z) - Math.log(cam.z)) * k);   // zoom eases in log space
+    if ((!visible && !first) || !W || !IM.seed.img) return;
+    if (!reduceMotion) clockT += dt;
+    if (!isNaN(pinT)) clockT = pinT;
+    current = reduceMotion || first ? target : current + (target - current) * (1 - Math.exp(-dt * 5.5));
+    if (Math.abs(target - current) < 1e-4) current = target;
     first = false;
+    var st = stateAt(current);
 
-    draw(st, t, dt);
-    world.style.transform = "translate(" + W / 2 + "px," + H / 2 + "px) scale(" + cam.z + ") translate(" + -cam.x + "px," + -cam.y + "px)";
-
-    islandEls.forEach(function (o, i) {
-      var on = !!st.shown[i];
-      if (on !== !!shown[i]) { shown[i] = on; o.el.classList.toggle("is-shown", on); }
-      o.card.classList.toggle("is-active", st.active === i);
-      o.el.classList.toggle("is-dim", st.active >= 0 && st.active !== i);   // only the branch you're on, so nothing hides behind a card
+    st.layers.forEach(function (L) { if (!IM[L.pic].img) needPic(L.pic); });
+    R.begin();
+    st.back.forEach(function (L) { if (L.alpha > 0.003 && IM[L.pic].ready) R.draw(L); });
+    st.layers.forEach(function (L) {
+      if (L.alpha <= 0.003 || !IM[L.pic].ready) return;
+      if (L.withPlate && L.T < 1 && IM[L.pic].cfg.plate) {   // what lies behind the roots / sprout until they grow
+        var b = IM[L.pic].cfg.plate, r = L.rect, kx = r.w / PW, ky = r.h / PH;
+        R.draw({ pic: L.pic, plate: true, alpha: L.alpha, rect: { x: r.x + b[0] * kx, y: r.y + b[1] * ky, w: b[2] * kx, h: b[3] * ky } });
+      }
+      R.draw(L);
     });
-    if (endEl) endEl.classList.toggle("is-shown", st.end > 0.3);
-    if (hintEl) hintEl.classList.toggle("is-hidden", current > 0.2);
+
+    fx.setTransform(DPR, 0, 0, DPR, 0, 0);
+    fx.clearRect(0, 0, W, H);
+    if (!noFx) st.fx.forEach(function (e) { if (IM[e.pic].ready) drawPicFx(e, clockT); });
+    if (!noFx) drawAir(dt, clockT, st);
+    if (vignette && !noFx) { fx.globalAlpha = 1; fx.drawImage(vignette, 0, 0, W, H); }
+
+    if (hintEl) hintEl.classList.toggle("is-hidden", current > 0.15);
   }
 
-  makeIslands();
-  if (document.fonts && document.fonts.ready) document.fonts.ready.then(measureCards);
-  stage.addEventListener("pointermove", function (e) {   // islands tilt gently toward the mouse
-    if (reduceMotion || e.pointerType !== "mouse") return;
-    var r = stage.getBoundingClientRect(), nx = (e.clientX - r.left) / r.width - 0.5, ny = (e.clientY - r.top) / r.height - 0.5;
-    world.style.setProperty("--ry", (nx * 12).toFixed(2) + "deg");
-    world.style.setProperty("--rx", (-ny * 8).toFixed(2) + "deg");
-  });
+  R = makeGL();
+  if (!R) {   // WebGL failed (perhaps after taking the canvas): start again on a fresh canvas with plain 2D drawing
+    var fresh = canvas.cloneNode(false);
+    canvas.parentNode.replaceChild(fresh, canvas);
+    canvas = fresh;
+    R = make2D();
+  }
   window.addEventListener("resize", resize);
   window.addEventListener("scroll", function () { readScroll(); }, { passive: true });
-  var pin = parseFloat(new URLSearchParams(location.search).get("grow"));
-  if (!isNaN(pin)) readScroll = function () { target = pin; };
+  if (!isNaN(pinU)) readScroll = function () { target = pinU; };
   resize();
-  var srcs = [SCENE.plate, SCENE.plateBlur, SCENE.tree, SCENE.treeGrow, SCENE.soil, SCENE.soilBlur,
-    GERM && GERM.base, null, GERM && GERM.roots, GERM && GERM.rootsGrow, SEED && SEED.src, SEED && SEED.grow]
-    .concat(SAPS.map(function (p) { return p.src; }));
-  Promise.all(srcs.map(load)).then(function (r) {
-    IMG.plate = r[0]; IMG.plateBlur = r[1]; IMG.soil = r[4]; IMG.soilBlur = r[5]; IMG.germ = r[6]; IMG.germBlur = r[7];
-    if (r[2]) REV.tree = new Revealer(r[2], r[3]);
-    if (r[8]) REV.roots = new Revealer(r[8], r[9]);
-    if (r[10]) REV.seed = new Revealer(r[10], r[11], 0.07);
-    (r.slice(12) || []).forEach(function (im, i) { IMG["sap" + i] = im; });
-    ready = true;
-  });
+
+  function loadSoft(name) {
+    return loadImg(S.dir + name + "-soft.webp").then(function (im) {
+      var p = IM[name]; p.soft = im;
+      if (im) { if (R) R.upload(p); p.ready = true; }
+    });
+  }
+  function loadPic(name) {
+    var c = PICS[name], d = S.dir;
+    return Promise.all([
+      loadImg(d + name + ".webp"), c.mask ? loadImg(d + name + "-mask.png") : null, c.plate ? loadImg(d + name + "-plate.webp") : null,
+    ]).then(function (r) {
+      var p = IM[name];
+      if (!r[0]) return;
+      p.img = r[0]; p.mask = r[1]; p.plate = r[2];
+      if (R) R.upload(p);
+      p.ready = true;
+    });
+  }
+  // the seed first so the page can start, plus the tiny soft copy of every picture (a stand-in until its
+  // sharp version arrives, so a fast scroll never shows an empty frame); then the rest in story order,
+  // two at a time, and whatever the current scroll position needs jumps the queue
+  var ORDER = ["seed", "sprout", "young", "tree"].concat(BR);
+  var queue = ORDER.slice(1), loading = 0;
+  function pump() {
+    while (loading < 2 && queue.length) {
+      loading++;
+      loadPic(queue.shift()).then(function () { loading--; pump(); });
+    }
+  }
+  needPic = function (name) {
+    var k = queue.indexOf(name);
+    if (k > 0) { queue.splice(k, 1); queue.unshift(name); }
+  };
+  Promise.all([loadPic("seed")].concat(ORDER.map(loadSoft))).then(pump);
+  Promise.all((S.leaves || []).map(function (f) { return loadImg(S.dir + f); })).then(function (r) { LEAVES = r.filter(Boolean); });
   requestAnimationFrame(frame);
 })();
