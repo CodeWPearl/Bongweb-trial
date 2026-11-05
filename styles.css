@@ -236,12 +236,13 @@ p { margin: 0; }
 .enquire-alt a, .footer-row a { user-select: all; }
 
 /* Grow: the whole landing page, a real tree that grows as you scroll */
-.grow { position: relative; height: 1000vh; margin-top: -68px; background: #23160d; }
+.grow { position: relative; height: 1000vh; margin-top: -68px; background: #17120b; }
 .grow-stage { position: sticky; top: 0; height: 100vh; height: 100svh; overflow: hidden; }
 .grow-canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
-.grow-world { position: absolute; left: 0; top: 0; width: 0; height: 0; transform-origin: 0 0; will-change: transform; }
+.grow-fx { position: absolute; inset: 0; width: 100%; height: 100%; display: block; pointer-events: none; }
+.sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
 
-.grow-hero, .grow-end, .isl-card {
+.grow-hero, .grow-end {
   background: rgba(255, 250, 242, .84);
   -webkit-backdrop-filter: blur(14px) saturate(1.3); backdrop-filter: blur(14px) saturate(1.3);
   border: 1px solid rgba(255, 255, 255, .7);
@@ -290,83 +291,6 @@ p { margin: 0; }
 .grow-hint.is-hidden { opacity: 0; }
 @keyframes hint { 50% { transform: translate(-50%, 6px); } }
 
-/* clay islands sit on the branches (world space; the camera moves .grow-world) */
-.isl-art {
-  position: absolute;
-  transform: translate(-50%, -100%) perspective(900px) rotateX(var(--rx, 0deg)) rotateY(var(--ry, 0deg));
-  opacity: 0; transition: opacity .5s ease, transform .5s ease-out;
-}
-.isl-glow {
-  position: absolute; left: 50%; bottom: -8%; width: 125%; aspect-ratio: 1.6; transform: translateX(-50%);
-  background: radial-gradient(closest-side, rgba(255, 246, 214, .6), rgba(255, 246, 214, 0) 72%);
-  opacity: 0; transition: opacity .8s ease .2s; pointer-events: none;
-}
-.isl.is-shown .isl-glow { opacity: 1; animation: glowpulse 4s ease-in-out infinite; }
-@keyframes glowpulse { 50% { opacity: .55; } }
-.isl-bob { position: relative; transform-origin: 50% 90%; transform: scale(.2) translateY(120px); transition: transform .9s cubic-bezier(.2, 1.5, .35, 1); }
-.isl.is-shown .isl-art { opacity: 1; }
-.isl.is-shown.is-dim .isl-art { opacity: 0; }
-.isl.is-shown .isl-bob { transform: none; animation: bob 5.5s ease-in-out infinite; }
-.isl-bob img { width: 100%; height: auto; display: block; user-select: none; -webkit-user-drag: none; filter: drop-shadow(0 16px 18px rgba(40, 30, 10, .35)); }
-/* stop-motion: frame a, b, c, b ... like a claymation loop */
-.isl-frames { position: relative; }
-.isl-frames img + img { position: absolute; inset: 0; opacity: 0; }
-.isl.is-shown .isl-frames:not(.no-motion) img { animation: .84s steps(1, end) infinite; }
-.isl.is-shown .isl-frames:not(.no-motion) .fa { animation-name: frame-a; }
-.isl.is-shown .isl-frames:not(.no-motion) .fb { animation-name: frame-b; }
-.isl.is-shown .isl-frames:not(.no-motion) .fc { animation-name: frame-c; }
-@keyframes frame-a { 0% { opacity: 1; } 25% { opacity: 0; } 100% { opacity: 0; } }
-@keyframes frame-b { 0% { opacity: 0; } 25% { opacity: 1; } 50% { opacity: 0; } 75% { opacity: 1; } 100% { opacity: 1; } }
-@keyframes frame-c { 0% { opacity: 0; } 50% { opacity: 1; } 75% { opacity: 0; } 100% { opacity: 0; } }
-@keyframes bob { 0%, 100% { transform: translateY(0) rotate(-.6deg); } 50% { transform: translateY(-10px) rotate(.8deg); } }
-
-.isl-puff { position: absolute; left: 50%; bottom: 10%; width: 0; height: 0; pointer-events: none; }
-.isl-puff span {
-  position: absolute; width: 18px; height: 18px; margin: -9px; border-radius: 50%;
-  background: radial-gradient(circle, #fff, rgba(255, 250, 235, .7) 40%, rgba(255, 250, 235, 0) 70%);
-  opacity: 0; transform: rotate(var(--a)) translateX(0) scale(.2);
-}
-.isl.is-shown .isl-puff span { animation: puff 1s ease-out forwards; }
-@keyframes puff {
-  0% { opacity: 0; transform: rotate(var(--a)) translateX(8px) scale(.3); }
-  25% { opacity: 1; }
-  100% { opacity: 0; transform: rotate(var(--a)) translateX(120px) scale(1.1); }
-}
-
-/* the card for the branch you're on, beside the island */
-.grow-cards { position: absolute; inset: 0; z-index: 3; pointer-events: none; }
-.isl-card {
-  position: absolute; top: 50%; right: max(20px, calc((100vw - 1180px) / 2)); width: clamp(280px, 30vw, 370px);
-  max-height: calc(100% - 120px); overflow: auto;
-  padding: 26px 26px 24px; border-radius: 26px; translate: 0 -50%;
-  opacity: 0; transform: translateY(24px) scale(.97); pointer-events: none;
-  transition: opacity .5s ease, transform .7s cubic-bezier(.2, 1.3, .4, 1);
-}
-.isl-card.on-left { right: auto; left: max(20px, calc((100vw - 1180px) / 2)); }
-.isl-card.is-active { opacity: 1; transform: none; pointer-events: auto; }
-.isl-kicker { font-size: 12px; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; color: #9e6a43; }
-.isl-card h3 { margin-top: 6px; font-size: 46px; color: var(--pine-deep); }
-.isl-promise { margin-top: 4px; font-family: var(--serif); font-size: 20px; color: var(--ink); }
-.chips { list-style: none; padding: 0; margin: 18px 0 0; display: flex; flex-wrap: wrap; gap: 8px; }
-.chip {
-  display: inline-block; font-size: 13.5px; font-weight: 600; color: var(--ink); line-height: 1.25; text-decoration: none;
-  padding: 8px 13px; border-radius: 999px;
-  background: linear-gradient(#fffdf8, #f3e9da);
-  box-shadow: inset 0 2px 0 rgba(255, 255, 255, .95), inset 0 -3px 0 rgba(150, 105, 60, .14), 0 6px 12px -8px rgba(90, 55, 25, .5);
-  opacity: 0; transform: translateY(8px) scale(.9);
-  transition: opacity .35s ease, transform .5s cubic-bezier(.2, 1.6, .4, 1), color .2s;
-}
-.isl-card.is-active .chip { opacity: 1; transform: none; }
-a.chip:hover { color: var(--pine); }
-a.chip:focus-visible { outline: 2px solid var(--pine); outline-offset: 2px; }
-.chip-soon { color: var(--ink-3); background: transparent; box-shadow: inset 0 0 0 1.5px #ddd0bb; }
-.chip small { margin-left: 6px; font-size: 10.5px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: #b7774f; }
-.isl-cta {
-  display: inline-block; margin-top: 18px; font-weight: 700; font-size: 15px; color: var(--wa);
-  text-decoration: none; border-bottom: 1.5px solid currentColor; padding-bottom: 2px;
-}
-.isl-cta::after { content: " →"; }
-
 .header-cta { margin-left: auto; }
 
 @media (max-width: 720px) {
@@ -386,24 +310,9 @@ a.chip:focus-visible { outline: 2px solid var(--pine); outline-offset: 2px; }
   .grow-end.is-shown { transform: none; }
   .grow-end-actions { justify-items: stretch; }
   .grow-end .btn { width: 100%; justify-content: center; }
-  .isl-card, .isl-card.on-left { padding: 16px 18px 16px; border-radius: 22px; }
-  .isl-kicker { font-size: 11px; }
-  .isl-card h3 { font-size: 30px; margin-top: 2px; }
-  .isl-promise { font-size: 17px; }
-  .chips { margin-top: 12px; gap: 6px; }
-  .chip { font-size: 12px; padding: 6px 10px; }
-  .isl-cta { margin-top: 12px; font-size: 14px; }
-}
-@media (max-width: 759px) {
-  .isl-card, .isl-card.on-left {
-    left: 16px; right: 16px; width: auto; top: auto; bottom: calc(16px + env(safe-area-inset-bottom, 0px)); translate: none;
-    max-height: 46vh;
-  }
 }
 @media (prefers-reduced-motion: reduce) {
-  .isl.is-shown .isl-bob, .isl.is-shown .isl-glow, .grow-hint { animation: none; }
-  .isl.is-shown .isl-frames img { animation: none !important; }
-  .isl-frames img + img { display: none; }
+  .grow-hint { animation: none; }
 }
 
 /* Footer */
