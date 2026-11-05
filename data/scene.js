@@ -29,6 +29,8 @@ window.BONGWEB_SCENE = {
   },
   // The seedling that breaks the surface (h is its height in landscape pixels)
   seedling: { src: "assets/germ/seedling.webp", grow: "assets/germ/seedling-grow.png", aspect: 0.4788, baseX: 0.4932, h: 70 },
+  // Close-up landscape behind the seedling (photo taken from the grass); grassLine = where the meadow meets the soil, as a fraction of its height
+  macro: { src: "assets/macro/backdrop.webp", grassLine: 0.88 },
   // Young trees between the seedling and the full tree (h in landscape pixels)
   saplings: [
     { src: "assets/germ/sapling1.webp", aspect: 0.4785, baseX: 0.5442, h: 150 },
