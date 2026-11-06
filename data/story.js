@@ -5,9 +5,16 @@
   The four growth pictures share one "world" so a picture can grow out of the one before it:
   `at` places a picture in the world ([left, top, scale]); the young tree's picture is the reference.
 
-  rigs: parts of a picture that move. c centre, r radius, p pivot (all px), rot swing (radians),
-        dx/dy travel (px), glow brightening, f beats per second, wave the shape of the motion, ph phase.
-  fx:   light added on top: lamp glows, glints, a camera flash, a chat bubble, steam from a cup.
+  rigs:   parts of a picture that move. c centre, r radius, p pivot (all px), rot swing (radians),
+          dx/dy travel (px), glow brightening, f beats per second, wave the shape of the motion, ph phase.
+  fx:     light added on top: glints on water drops and metal, a chat bubble that pops, ticks that flash.
+  wind:   how far the leaves move in the breeze. dapple: how much the patches of sunlight on the bark shimmer.
+  focus:  the part of a picture to keep in view; on phones the soft backdrop around the picture is taken from
+          there (for the growth pictures, a plain stretch of sky and ground).
+  text:   the painted logo, words and button, lifted into their own layer (<name>-text.webp, placed at `box`)
+          so they stay still and readable while the art grows, and so phones can show them above the picture.
+          logo / copy / button / scroll are parts of that layer (on phones the logo sits in the header).
+  cta:    what a painted button does: open WhatsApp with a message, or scroll on to the branches.
 */
 window.BONGWEB_STORY = {
   w: 1672, h: 941,
@@ -16,140 +23,124 @@ window.BONGWEB_STORY = {
 
   pics: {
     seed: {
-      at: [327.3, 439.3, 0.674], mask: "full", plate: [786, 652, 290, 232], soft: 0.06,
-      alt: "A glossy brown seed engraved with the word Bongweb, resting on moss and wet soil in the sunlight",
-      wind: 1.6, air: "bokeh",
-      beams: { x: -120, y: -160, ang: 0.62, spread: 0.5, len: 1500, tint: "255,226,160", a: 0.12 },
+      at: [257.9, 215.5, 0.8666], mask: "full", plate: [875, 234, 732, 614], soft: 0.06, focus: [300, 470],
+      text: { box: [82, 9, 642, 865], logo: [98, 13, 182, 167], copy: [86, 228, 634, 504], button: [89, 636, 431, 96], scroll: [89, 831, 224, 39] },
+      cta: { label: "Chat on WhatsApp", wa: "Hi Bongweb, I'd like to talk about a project." },
+      alt: "AI studio, human review. Your next idea starts here. Websites, brand and marketing, built with AI and checked by people. Beside the words, a glossy brown seed engraved Bongweb puts out a root and two fresh leaves.",
+      wind: 4, air: "bokeh",
+      beams: { x: -120, y: -160, ang: 0.62, spread: 0.5, len: 1500, tint: "255,226,160", a: 0.07 },
       fx: [
-        { t: "glint", x: 1172, y: 190, r: 16 }, { t: "glint", x: 1184, y: 263, r: 12, d: 1.1 },
-        { t: "glint", x: 1232, y: 228, r: 10, d: 2.0 }, { t: "glint", x: 629, y: 373, r: 14, d: 0.6 },
-        { t: "glint", x: 1062, y: 299, r: 9, d: 1.6 }, { t: "glint", x: 1338, y: 336, r: 9, d: 2.6 },
+        { t: "glint", x: 1010, y: 348, r: 13 }, { t: "glint", x: 964, y: 387, r: 12, d: 1.1 },
+        { t: "glint", x: 1321, y: 567, r: 8, d: 2.0 },
+        { t: "glint", x: 1459, y: 363, r: 10, d: 0.6, after: 0.97 }, { t: "glint", x: 1473, y: 500, r: 9, d: 1.6, after: 0.97 },
       ],
       rigs: [],
     },
     sprout: {
-      at: [45, 96, 1], mask: "full", plate: [818, 176, 506, 548], soft: 0.06,
-      alt: "The seed has cracked open and a green sprout with two leaves rises from it, under a great old tree",
-      wind: 1.8, air: "bokeh",
-      beams: { x: -100, y: -140, ang: 0.55, spread: 0.45, len: 1500, tint: "255,232,175", a: 0.09 },
-      fx: [{ t: "glint", x: 1287, y: 266, r: 15, after: 0.97 }, { t: "glint", x: 1178, y: 252, r: 8, d: 1.4, after: 0.97 }],
+      at: [148.9, 8.7, 0.992], mask: "full", plate: [733, 70, 939, 771], soft: 0.06, focus: [300, 470],
+      text: { box: [95, 13, 605, 865], logo: [102, 17, 194, 184], copy: [100, 229, 596, 515], button: [103, 648, 418, 96], scroll: [99, 835, 227, 39] },
+      cta: { label: "Plan your project", wa: "Hi Bongweb, I'd like to plan a project: the scope, the price and a delivery date." },
+      alt: "From idea to a clear plan. Give your idea a shape: a clear scope, a fixed price and an agreed delivery date. Beside the words, the seed has cracked open and a green sprout rises out of the shell.",
+      wind: 2.5, air: "bokeh",
+      beams: { x: -100, y: -140, ang: 0.55, spread: 0.45, len: 1500, tint: "255,232,175", a: 0.06 },
+      fx: [{ t: "glint", x: 930, y: 200, r: 12, after: 0.97 }, { t: "glint", x: 1270, y: 209, r: 14, d: 1.4, after: 0.97 }],
       rigs: [
-        { c: [1070, 330], r: [330, 260], p: [1020, 700], rot: 0.012, f: 0.22 },                       // the whole sprout sways from its base
-        { c: [1190, 275], r: [210, 150], p: [1068, 352], rot: 0.022, f: 0.41, ph: 0.3 },               // right leaf flutters
-        { c: [935, 318], r: [190, 120], p: [1050, 362], rot: -0.02, f: 0.37, ph: 0.7 },                // left leaf flutters
+        { c: [1094, 342], r: [340, 276], p: [1032, 591], rot: 0.012, f: 0.22 },                       // the whole shoot sways from the shell
+        { c: [1249, 198], r: [170, 106], p: [1103, 273], rot: 0.025, f: 0.41, ph: 0.3 },               // right leaf flutters
+        { c: [928, 254], r: [142, 87], p: [1057, 306], rot: -0.022, f: 0.37, ph: 0.7 },                // left leaf flutters
       ],
     },
     young: {
-      at: [0, 0, 1], mask: "half", soft: 0.07, rim: 1,
-      alt: "A young tree with fresh leaves on a sunny hillside, a small wooden Bongweb sign at its roots",
+      at: [0, 0, 1], mask: "half", soft: 0.07, rim: 1, focus: [300, 470],
+      text: { box: [87, 15, 685, 861], logo: [109, 19, 191, 181], copy: [91, 252, 677, 453], button: [91, 620, 414, 85], scroll: [93, 836, 194, 36] },
+      cta: { label: "Explore our services", scrollTo: "branches" },
+      alt: "Built around your business. Start small, make room to grow: start with the website, brand or content you need and add more as your business grows. Beside the words, a young tree with a small wooden Bongweb sign at its roots.",
       wind: 2.2, air: "leaves",
-      fx: [{ t: "glint", x: 1096, y: 770, r: 10, d: 0.4 }],
-      rigs: [{ c: [1030, 280], r: [620, 330], p: [1040, 790], rot: 0.006, f: 0.17 }],
+      fx: [],
+      rigs: [{ c: [1174, 311], r: [438, 301], p: [1174, 767], rot: 0.005, f: 0.17 }],
     },
     tree: {
-      at: [210, 20, 1], mask: "half", soft: 0.07, rim: 1,
-      alt: "A giant tree with five tree houses on its branches labelled Build, Brand, Content, Growth and Checked, and a Bongweb sign on the trunk",
+      at: [-41.4, -84, 1.0792], mask: "half", soft: 0.07, rim: 1, focus: [300, 470],
+      text: { box: [79, 14, 559, 853], logo: [100, 18, 199, 184], copy: [83, 250, 551, 462], button: [85, 621, 380, 91], scroll: [87, 825, 214, 38] },
+      cta: { label: "Explore our work", scrollTo: "branches" },
+      alt: "Meet Bongweb. One studio, five ways forward: build, brand, content and growth, with human review at every step. Beside the words, a giant tree whose branches carry five signs, Build, Brand, Content, Growth and Checked, and a Bongweb sign on the trunk.",
       wind: 1.7, air: "leaves",
-      fx: [
-        { t: "lamp", x: 165, y: 483, r: 26 }, { t: "lamp", x: 1161, y: 261, r: 26, d: 0.7 },
-        { t: "lamp", x: 1255, y: 513, r: 24, d: 1.3 }, { t: "lamp", x: 809, y: 93, r: 22, d: 0.3 },
-        { t: "glint", x: 835, y: 537, r: 14, d: 0.8 },
-      ],
+      fx: [],
       rigs: [],
-      // where each branch's tree house is (x, y, w, h), in the order the camera visits them
-      houses: [[100, 405, 430, 262], [186, 156, 388, 230], [678, 22, 448, 230], [1068, 192, 490, 206], [1158, 432, 418, 226]],
+      // where each branch's sign sits (x, y, w, h), in the order the camera visits them
+      stops: [[655, 434, 304, 194], [677, 248, 304, 194], [977, 134, 304, 194], [1264, 248, 304, 194], [1281, 438, 304, 194]],
     },
 
     build: {
-      mask: "half", wind: 1.5, air: "leaves", focus: [820, 430],
-      alt: "Builders in a tree house: two people planning a shop website on paper, one at a laptop, one pressing a panel onto a big website frame, and one on the branch reading a WhatsApp message",
-      fx: [
-        { t: "lamp", x: 1375, y: 241, r: 34 }, { t: "pop", x: 1575, y: 348, r: 26 },
-        { t: "lamp", x: 520, y: 713, r: 9, d: 0.4, a: 0.5 }, { t: "lamp", x: 695, y: 690, r: 9, d: 1.1, a: 0.5 },
-        { t: "lamp", x: 960, y: 635, r: 9, d: 1.9, a: 0.5 }, { t: "lamp", x: 1235, y: 590, r: 9, d: 2.6, a: 0.5 },
-      ],
+      mask: "half", wind: 1.5, dapple: 0.3, air: "leaves", focus: [760, 470],
+      alt: "Build. Your business, online and working: websites, stores and apps built around what your business needs. Websites, web apps, chatbots. On a branch by the Build sign, a man presses a panel onto a big wooden-framed shop website.",
+      cta: { label: "Discuss your build", wa: "Hi Bongweb, I'd like to discuss a website, store or app." },
+      text: { box: [1013, 55, 589, 405], copy: [1017, 59, 581, 397], button: [1026, 387, 349, 64] },
+      fx: [{ t: "pop", x: 1153, y: 715, r: 14 }],
       rigs: [
-        { c: [255, 245], r: [200, 120], p: [255, 150], rot: 0.02, f: 0.24 },                           // the Build sign swings on its ropes
-        { c: [420, 420], r: [85, 90], p: [420, 352], rot: 0.035, f: 0.33, ph: 0.4 },                   // pinned sketch sways
-        { c: [238, 388], r: [56, 58], p: [236, 442], rot: 0.05, f: 0.36 },                             // planner looks between plan and partner
-        { c: [315, 528], r: [118, 80], p: [315, 600], rot: 0.015, dy: 2.5, f: 0.5, ph: 0.2 },          // the paper plan lifts a little
-        { c: [490, 490], r: [54, 52], p: [494, 538], rot: 0.06, f: 0.46, ph: 0.3, wave: "talk" },      // partner talks
-        { c: [690, 506], r: [48, 46], p: [694, 546], rot: 0.04, f: 0.3, ph: 0.7 },                     // laptop worker thinks
-        { c: [950, 355], r: [74, 54], p: [996, 392], rot: 0.05, dx: -3, f: 0.55, wave: "press" },     // smoothing the panel onto the site
-        { c: [1515, 366], r: [54, 54], p: [1515, 412], rot: 0.04, f: 0.5, wave: "talk" },              // laughing at the message
+        { c: [287, 551], r: [113, 117], p: [287, 452], rot: 0.02, f: 0.3 },                            // the pinned sketch sways
+        { c: [948, 465], r: [62, 64], p: [950, 525], rot: 0.03, f: 0.32 },                             // he nods while he works
+        { c: [776, 520], r: [103, 110], dx: -2.5, f: 0.45, wave: "press" },                            // smoothing the panel onto the page
+        { c: [1432, 630], r: [166, 147], p: [1270, 718], rot: 0.02, f: 0.27 },                         // the twig sways
       ],
     },
     brand: {
-      mask: "half", wind: 1.5, air: "leaves", focus: [820, 420],
-      alt: "A brand team in a tree house: one painting a leaf logo, one pointing at the logo board, one holding colour swatches, and one lifting a branded box",
-      fx: [{ t: "lamp", x: 142, y: 378, r: 26 }, { t: "lamp", x: 1283, y: 201, r: 30, d: 0.8 }, { t: "lamp", x: 1426, y: 445, r: 30, a: 0.35, d: 1.5 }],
+      mask: "half", wind: 1.5, dapple: 0.3, air: "leaves", focus: [760, 470],
+      alt: "Brand. Look ready for business: a clear identity and thoughtful design for a consistent, recognisable business. Identity, UI/UX, packaging. Under the hanging Brand sign, a woman draws a leaf logo on a gift box.",
+      cta: { label: "Shape your brand", wa: "Hi Bongweb, I'd like to talk about my brand." },
+      text: { box: [1007, 66, 595, 461], copy: [1011, 70, 587, 453], button: [1088, 453, 359, 65] },
+      fx: [{ t: "glint", x: 513, y: 452, r: 8, d: 0.8 }],
       rigs: [
-        { c: [240, 235], r: [170, 95], p: [240, 150], rot: 0.02, f: 0.22 },                            // the Brand sign swings
-        { c: [1283, 192], r: [42, 62], p: [1283, 140], rot: 0.06, f: 0.45, ph: 0.2 },                 // lantern sways
-        { c: [735, 262], r: [100, 52], p: [735, 222], rot: 0.035, f: 0.4 },                            // swatches on the line
-        { c: [320, 392], r: [135, 68], p: [320, 336], rot: 0.025, f: 0.32, ph: 0.5 },                  // sketches on the line
-        { c: [262, 525], r: [48, 46], p: [240, 562], rot: 0.08, f: 0.6, wave: "paint" },               // painting
-        { c: [690, 412], r: [62, 32], p: [648, 420], rot: 0.05, dx: 3, f: 0.5, wave: "press" },        // tapping the logo board
-        { c: [610, 336], r: [52, 54], p: [606, 382], rot: 0.04, f: 0.3, ph: 0.4 },                     // his head
-        { c: [612, 456], r: [46, 46], p: [612, 496], rot: 0.05, f: 0.4, ph: 0.2, wave: "talk" },       // she answers
-        { c: [1452, 310], r: [84, 62], p: [1500, 362], rot: 0.04, dy: -3, f: 0.4, wave: "lift" },      // lifting the box to look
-        { c: [1545, 240], r: [52, 56], p: [1545, 292], rot: 0.04, f: 0.35 },                           // her head
+        { c: [235, 235], r: [190, 95], p: [235, 125], rot: 0.014, f: 0.22 },                           // the Brand sign swings on its ropes
+        { c: [510, 395], r: [115, 100], p: [530, 480], rot: 0.02, f: 0.28 },                           // her head
+        { c: [668, 628], r: [48, 40], p: [630, 650], rot: 0.07, f: 0.6, wave: "paint" },               // drawing the logo
+        { c: [1450, 610], r: [170, 130], p: [1330, 700], rot: 0.02, f: 0.25, ph: 0.4 },                // the twig sways
       ],
     },
     content: {
-      mask: "half", wind: 1.5, air: "leaves", focus: [830, 430],
-      alt: "A content team in a tree house: sketches pinned on a line, a man pinning posts on a calendar, a photographer shooting a mug, and a woman hanging photos on a line",
-      fx: [{ t: "lamp", x: 1046, y: 509, r: 40 }, { t: "flash", x: 996, y: 574, r: 60 }, { t: "steam", x: 1058, y: 578 }],
+      mask: "half", wind: 1.5, dapple: 0.3, air: "leaves", focus: [760, 470],
+      alt: "Content. Stay seen, stay remembered: social posts, carousels and captions planned around your business. Calendars, posts, captions. Below the Content sign, a woman pins a post onto a content calendar.",
+      cta: { label: "Plan your content", wa: "Hi Bongweb, I'd like help planning my content." },
+      text: { box: [966, 57, 641, 466], copy: [970, 61, 633, 458], button: [975, 441, 391, 73] },
+      fx: [{ t: "glint", x: 800, y: 325, r: 14, d: 0.5 }],
       rigs: [
-        { c: [315, 402], r: [135, 82], p: [315, 346], rot: 0.025, f: 0.33 },                           // sketches on the line
-        { c: [1330, 368], r: [320, 64], p: [1330, 318], dy: 2, f: 0.3, ph: 0.6 },                      // photos on the line
-        { c: [255, 440], r: [42, 46], p: [240, 482], rot: 0.06, f: 0.5 },                              // clipping a sketch
-        { c: [120, 472], r: [58, 56], p: [130, 522], rot: 0.03, f: 0.3, ph: 0.5 },                     // her head
-        { c: [730, 470], r: [48, 42], p: [690, 500], rot: 0.04, dx: 3, f: 0.55, wave: "press" },       // pinning a post
-        { c: [600, 430], r: [48, 50], p: [600, 472], rot: 0.04, f: 0.35, ph: 0.2 },                    // his head
-        { c: [950, 548], r: [84, 68], p: [930, 622], rot: 0.02, f: 0.25 },                             // photographer leans
-        { c: [1600, 400], r: [72, 72], p: [1580, 470], rot: 0.03, f: 0.4, ph: 0.3 },                   // hanging a photo
-        { c: [1510, 472], r: [50, 54], p: [1515, 522], rot: 0.04, f: 0.3 },                            // her head
+        { c: [360, 410], r: [110, 88], p: [390, 480], rot: 0.02, f: 0.28 },                            // her head
+        { c: [645, 485], r: [45, 42], dx: 2, f: 0.45, wave: "press" },                                 // pressing the post onto its pin
+        { c: [190, 720], r: [110, 120], p: [300, 560], rot: 0.012, f: 0.35, ph: 0.3 },                 // the end of her scarf stirs
+        { c: [1530, 600], r: [160, 130], p: [1400, 700], rot: 0.02, f: 0.26, ph: 0.6 },                // the twig sways
       ],
     },
     growth: {
-      mask: "half", wind: 1.5, air: "leaves", focus: [830, 430],
-      alt: "A growth team in a tree house: a man planning with a target chart, a woman sealing envelopes, envelopes on a line to a mailbox, and two people delighted by a WhatsApp message beside a rising chart",
-      fx: [{ t: "lamp", x: 503, y: 312, r: 32 }, { t: "pop", x: 1422, y: 391, r: 22 }, { t: "steam", x: 381, y: 632 }],
+      mask: "half", wind: 1.5, dapple: 0.3, air: "leaves", focus: [760, 470],
+      alt: "Growth. Turn attention into enquiries: reach the right people and understand what works through clear reporting. Outreach, lead generation, reporting. Under the hanging Growth sign, a woman posts a letter into a wooden mailbox.",
+      cta: { label: "Discuss your growth", wa: "Hi Bongweb, I'd like to get more enquiries for my business." },
+      text: { box: [1001, 39, 568, 416], copy: [1005, 43, 560, 408], button: [1010, 382, 381, 64] },
+      fx: [{ t: "pop", x: 1203, y: 530, r: 20 }, { t: "tick", x: 1160, y: 676, r: 10, d: 1.2 }, { t: "glint", x: 955, y: 510, r: 10, d: 2.1 }],
       rigs: [
-        { c: [225, 200], r: [185, 80], p: [225, 112], rot: 0.018, f: 0.22 },                           // the Growth sign swings
-        { c: [503, 300], r: [44, 58], p: [503, 255], rot: 0.05, f: 0.45 },                             // lantern sways
-        { c: [320, 386], r: [125, 68], p: [320, 330], rot: 0.02, f: 0.3, ph: 0.4 },                    // portraits on the line
-        { c: [836, 396], r: [42, 38], p: [836, 356], rot: 0.08, f: 0.5 },                              // envelopes swing on the rope
-        { c: [940, 426], r: [40, 36], p: [940, 396], rot: 0.07, f: 0.45, ph: 0.3 },
-        { c: [1025, 432], r: [37, 34], p: [1025, 402], rot: 0.08, f: 0.55, ph: 0.6 },
-        { c: [700, 592], r: [92, 42], p: [700, 622], dy: 3, f: 0.5, wave: "press" },                   // sealing an envelope
-        { c: [650, 396], r: [56, 56], p: [655, 452], rot: 0.04, f: 0.3 },                              // her head
-        { c: [1335, 376], r: [52, 52], p: [1340, 422], rot: 0.05, f: 0.6, wave: "talk" },              // laughing at the message
-        { c: [1500, 456], r: [42, 36], p: [1470, 470], rot: 0.08, f: 0.6, ph: 0.25 },                  // he gestures
+        { c: [200, 220], r: [185, 85], p: [215, 120], rot: 0.014, f: 0.22 },                           // the Growth sign swings on its ropes
+        { c: [510, 315], r: [120, 115], p: [520, 420], rot: 0.018, f: 0.26 },                          // her head
+        { c: [790, 555], r: [115, 65], dx: 4, dy: 1, f: 0.32, wave: "press" },                         // posting the letter
+        { c: [975, 445], r: [40, 35], p: [958, 470], rot: 0.06, f: 0.55 },                             // the mailbox flag
+        { c: [1530, 690], r: [160, 130], p: [1400, 760], rot: 0.02, f: 0.27, ph: 0.2 },                // the twig sways
       ],
     },
     checked: {
-      mask: "half", wind: 1.4, air: "leaves", focus: [840, 420],
-      alt: "Reviewers in a tree house: one marking a printout with a red pen, one typing on a laptop, a checklist reading Quality, Details, Usability, and a finished book handed over with a green seal",
+      mask: "half", wind: 1.4, dapple: 0.3, air: "leaves", focus: [760, 470],
+      alt: "Checked by people. AI helps us make, people make sure: a senior person reviews and refines every piece before handover. Review, refinement, handover. Under the hanging Checked sign, an older woman marks a page with a red pencil.",
+      cta: { label: "Chat on WhatsApp", wa: "Hi Bongweb, I'd like to talk about a project." },
+      text: { box: [976, 68, 601, 447], copy: [980, 72, 593, 439], button: [990, 438, 367, 68] },
       fx: [
-        { t: "lamp", x: 336, y: 334, r: 36 }, { t: "glint", x: 1475, y: 419, r: 18, d: 0.5 },
-        { t: "tick", x: 751, y: 539, r: 13 }, { t: "tick", x: 754, y: 568, r: 13, d: 0.45 }, { t: "tick", x: 758, y: 596, r: 13, d: 0.9 },
+        { t: "tick", x: 873, y: 622, r: 11 }, { t: "tick", x: 869, y: 649, r: 11, d: 0.45 }, { t: "tick", x: 866, y: 676, r: 11, d: 0.9 },
+        { t: "tick", x: 930, y: 565, r: 30, d: 1.5 }, { t: "glint", x: 690, y: 315, r: 9, d: 2.2 },
       ],
       rigs: [
-        { c: [315, 135], r: [225, 90], p: [315, 45], rot: 0.012, f: 0.2 },                             // the Checked sign swings
-        { c: [345, 300], r: [54, 48], p: [345, 255], rot: 0.05, f: 0.4 },                              // lamp sways
-        { c: [196, 346], r: [52, 54], p: [200, 396], rot: 0.04, f: 0.35, wave: "talk" },               // young man talks
-        { c: [440, 376], r: [52, 52], p: [445, 422], rot: 0.04, f: 0.3, ph: 0.5 },                     // she listens
-        { c: [765, 456], r: [42, 36], p: [745, 470], rot: 0.06, dx: 3, f: 1.1, wave: "write" },        // marking the printout
-        { c: [752, 336], r: [52, 52], p: [756, 382], rot: 0.03, f: 0.25 },                             // her head
-        { c: [1030, 562], r: [58, 26], p: [1030, 562], dy: 1.6, f: 4.2, wave: "type" },                // typing
-        { c: [985, 376], r: [52, 52], p: [990, 422], rot: 0.04, f: 0.35, ph: 0.6 },                    // her head
-        { c: [1215, 302], r: [56, 56], p: [1220, 352], rot: 0.04, f: 0.3, wave: "talk" },              // handing over the book
-        { c: [1580, 322], r: [52, 56], p: [1580, 372], rot: 0.04, f: 0.4, ph: 0.2 },                   // she smiles back
+        { c: [235, 190], r: [200, 95], p: [235, 40], rot: 0.012, f: 0.2 },                             // the Checked sign swings on its ropes
+        { c: [595, 280], r: [130, 130], p: [610, 400], rot: 0.015, f: 0.25 },                          // her head
+        { c: [620, 605], r: [70, 55], p: [560, 640], rot: 0.03, dx: 2, f: 1.0, wave: "write" },        // marking the page
+        { c: [1480, 650], r: [170, 170], p: [1330, 720], rot: 0.018, f: 0.25, ph: 0.5 },               // the twig sways
       ],
     },
   },
-  // the order of the branches, matching the tree houses above
+  // the order of the branches, matching the signs above
   branches: ["build", "brand", "content", "growth", "checked"],
 };
