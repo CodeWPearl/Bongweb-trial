@@ -62,10 +62,10 @@ p { margin: 0; }
 /* Header */
 .site-header {
   position: sticky; top: env(safe-area-inset-top, 0px); z-index: 20;
-  background: color-mix(in srgb, var(--paper) 88%, transparent);
-  backdrop-filter: blur(10px);
-  border-bottom: 1px solid transparent;
+  background: transparent;   /* the painted logo and sky show through; only the WhatsApp button sits here */
+  pointer-events: none;
 }
+.site-header a { pointer-events: auto; }
 .header-row { display: flex; align-items: center; gap: 24px; height: 68px; }
 .wordmark {
   font-family: var(--serif); font-size: 26px; font-weight: 600; letter-spacing: -0.02em;
@@ -235,8 +235,8 @@ p { margin: 0; }
 .form-done a { color: var(--pine); font-weight: 600; }
 .enquire-alt a, .footer-row a { user-select: all; }
 
-/* Grow: the whole landing page, a real tree that grows as you scroll */
-.grow { position: relative; height: 1000vh; margin-top: -68px; background: #17120b; }
+/* Grow: the whole landing page, a painted tree that grows as you scroll */
+.grow { position: relative; height: 1000vh; margin-top: -68px; background: #fcf0e6; }
 .grow-stage { position: sticky; top: 0; height: 100vh; height: 100svh; overflow: hidden; }
 .grow-canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
 .grow-fx { position: absolute; inset: 0; width: 100%; height: 100%; display: block; pointer-events: none; }
@@ -281,15 +281,15 @@ p { margin: 0; }
   border-radius: 4px; background: rgba(255, 255, 255, .28); overflow: hidden;
 }
 .grow-meter span { position: absolute; inset: 0; transform-origin: bottom; transform: scaleY(0); background: linear-gradient(#8cc456, #8a5a35); border-radius: 4px; }
-.grow-hint {
-  position: absolute; z-index: 3; left: 50%; bottom: calc(22px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%);
-  font-size: 13px; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; color: rgba(255, 248, 236, .9);
-  text-shadow: 0 1px 10px rgba(0, 0, 0, .45);
-  transition: opacity .4s;
-  animation: hint 2.2s ease-in-out infinite;
+/* a link over each painted button (invisible: the button is part of the picture) */
+.grow-cta {
+  position: absolute; z-index: 4; display: block; border-radius: 10px;
+  color: transparent; font-size: 1px; overflow: hidden; white-space: nowrap;
+  transition: box-shadow .2s;
 }
-.grow-hint.is-hidden { opacity: 0; }
-@keyframes hint { 50% { transform: translate(-50%, 6px); } }
+.grow-cta:hover { box-shadow: 0 0 0 3px rgba(255, 252, 244, .75), 0 10px 26px -12px rgba(19, 58, 44, .7); }
+.grow-cta:focus-visible { outline: 3px solid #1f8f55; outline-offset: 3px; }
+
 
 .header-cta { margin-left: auto; }
 
@@ -311,10 +311,6 @@ p { margin: 0; }
   .grow-end-actions { justify-items: stretch; }
   .grow-end .btn { width: 100%; justify-content: center; }
 }
-@media (prefers-reduced-motion: reduce) {
-  .grow-hint { animation: none; }
-}
-
 /* Footer */
 .site-footer { padding: 32px 0; background: var(--pine-deep); color: #b8c4bc; border-top: 1px solid rgba(255,255,255,.08); }
 .footer-row { display: flex; align-items: center; gap: 24px; font-size: 14px; }
