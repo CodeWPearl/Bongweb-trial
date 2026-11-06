@@ -1,19 +1,23 @@
 /*
   Bongweb landing page: the studio's story in nine painted pictures, played by scrolling.
 
-  1. A seed engraved "Bongweb" puts out its roots.
+  1. A seed engraved "Bongweb" puts out a root and two leaves.
   2. The seed cracks open and a sprout grows out of it.
-  3. The sprout grows into a young tree, and the young tree into a giant tree with five tree houses.
-  4. The camera flies into each tree house (Build, Brand, Content, Growth, Checked) and its picture
+  3. The sprout grows into a young tree, and the young tree into a giant tree whose branches carry five signs.
+  4. The camera flies to each sign (Build, Brand, Content, Growth, Checked) and the picture of that branch
      fills the screen, alive with small movements.
   5. The camera pulls back to the whole tree.
 
   Pictures and measurements live in data/story.js. Each picture has a mask (assets/story/*-mask.png):
-    red   which pixels stay hidden until growth reaches them (roots, sprout; the whole picture for the trees)
+    red   which pixels stay hidden until growth reaches them (root, leaves, sprout; the whole picture for the
+          trees); in the branch pictures, the patches of sunlight on the bark, which shimmer
     green the order growth reaches them (0 first, 1 last)
     blue  how much the leaves there move in the breeze
   One WebGL shader draws every picture with its growth, breeze and "rigs" (a head that nods, a sign that
-  swings on its ropes). Lamp light, glints, steam and falling leaves are drawn on a 2D canvas above it.
+  swings on its ropes). Glints, chat bubbles, ticks and falling leaves are drawn on a 2D canvas above it.
+  The first four pictures carry painted words (logo, headline, button). Those were lifted into their own layer
+  (<name>-text.webp) so they stay still and readable while the art grows and the camera moves; on phones the
+  logo sits in the header and the words above the picture. Every painted button is a real link.
   Add ?grow=7.5 to the URL to pin the story at a point, and &t=2 to pin the animation clock (for testing).
 */
 (function () {
@@ -27,7 +31,7 @@
   var fx = fxCanvas.getContext("2d");
   var reduceMotion = !!(window.matchMedia && matchMedia("(prefers-reduced-motion: reduce)").matches);
   var PW = S.w, PH = S.h, PICS = S.pics, BR = S.branches;
-  var BG = [0.09, 0.07, 0.045];
+  var BG = [0.99, 0.94, 0.9];   // the cream of the painted sky near the ground
   var PI = Math.PI;
 
   /* ---------- helpers ---------- */
@@ -92,7 +96,7 @@
     "uniform sampler2D uTex;uniform sampler2D uSoft;uniform sampler2D uMask;",
     "uniform float uUseMask;uniform float uReveal;uniform float uT;uniform float uEdge;uniform float uRim;",
     "uniform float uAlpha;uniform float uBlur;uniform float uTime;uniform float uWind;uniform float uFeather;",
-    "uniform float uAsp;uniform float uDim;uniform float uMirror;uniform float uRigs;uniform vec2 uTexel;",
+    "uniform float uAsp;uniform float uDim;uniform float uMirror;uniform float uRigs;uniform float uDapple;uniform vec2 uTexel;",
     "uniform vec4 uC[10];uniform vec4 uP[10];uniform vec4 uM[10];",
     "varying vec2 vUv;",
     "void main(){",
@@ -115,10 +119,13 @@
     " }",
     " vec3 col=texture2D(uTex,q).rgb;",
     " if(uBlur>0.001){col=mix(col,texture2D(uSoft,q).rgb,uBlur);}",
+    " if(uDapple>0.0&&m.r>0.001){float n=sin(q.x*61.0+q.y*23.0+uTime*0.8)*sin(q.x*29.0-q.y*71.0-uTime*0.55+1.3);",
+    "  col*=1.0+m.r*uDapple*(0.25-(0.5+0.5*n));}",   // sunlight patches fade and return as the leaves above move
     " col=col*uDim+glow*vec3(1.0,0.93,0.78);",
     " float a=1.0;",
     " if(uReveal>0.5){float rev=1.0-smoothstep(uT-uEdge,uT,m.g);a=1.0-m.r*(1.0-rev);",
-    "  float front=smoothstep(uT-uEdge*3.0,uT-uEdge*0.6,m.g)*rev*m.r;col+=front*uRim*vec3(0.11,0.1,0.06);}",
+    "  float front=smoothstep(uT-uEdge*3.0,uT-uEdge*0.6,m.g)*rev*m.r;",
+    "  col+=front*uRim*vec3(0.11,0.1,0.06)*clamp((1.0-dot(col,vec3(0.3,0.59,0.11)))*1.8,0.0,1.0);}",   // the growing edge glows; pale sky stays as it is
     " if(uFeather>0.0){vec2 e=min(uv,1.0-uv);a*=smoothstep(0.0,uFeather,e.x)*smoothstep(0.0,uFeather*uAsp,e.y);}",
     " a*=uAlpha;",
     " gl_FragColor=vec4(col*a,a);",
@@ -149,7 +156,7 @@
       gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([0, 0, 1, 0, 0, 1, 1, 1]), gl.STATIC_DRAW);
       var aPos = gl.getAttribLocation(prog, "aPos"); gl.enableVertexAttribArray(aPos); gl.vertexAttribPointer(aPos, 2, gl.FLOAT, false, 0, 0);
       ["uQuad", "uImg", "uView", "uTex", "uSoft", "uMask", "uUseMask", "uReveal", "uT", "uEdge", "uRim", "uAlpha", "uBlur", "uTime",
-        "uWind", "uFeather", "uAsp", "uDim", "uMirror", "uRigs", "uTexel", "uC", "uP", "uM"].forEach(function (n) { U[n] = gl.getUniformLocation(prog, n); });
+        "uWind", "uFeather", "uAsp", "uDim", "uMirror", "uRigs", "uDapple", "uTexel", "uC", "uP", "uM"].forEach(function (n) { U[n] = gl.getUniformLocation(prog, n); });
       gl.uniform1i(U.uTex, 0); gl.uniform1i(U.uSoft, 1); gl.uniform1i(U.uMask, 2);
       gl.uniform1f(U.uAsp, PW / PH); gl.uniform2f(U.uTexel, 1 / PW, 1 / PH);
       gl.enable(gl.BLEND); gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
@@ -217,6 +224,7 @@
         gl.uniform1f(U.uFeather, L.feather || 0);
         gl.uniform1f(U.uDim, L.dim || 1);
         gl.uniform1f(U.uMirror, L.mirror ? 1 : 0);
+        gl.uniform1f(U.uDapple, useMask && !L.reveal && L.live && !reduceMotion ? (p.cfg.dapple || 0) : 0);
         var n = L.live && !L.plate && !early && !reduceMotion ? p.rigs.length : 0;
         if (n) { gl.uniform4fv(U.uC, p.rigC); gl.uniform4fv(U.uP, p.rigP); gl.uniform4fv(U.uM, rigMotion(p, clockT)); }
         gl.uniform1f(U.uRigs, n);
@@ -257,7 +265,7 @@
   }
 
   /* ---------- layout ---------- */
-  var W = 0, H = 0, DPR = 1;
+  var W = 0, H = 0, DPR = 1, CY = 0, HEAD = 68;
   function portrait() { return W / H < 0.9; }
 
   // world: the young tree's picture is the reference; the other growth pictures are placed by `at`
@@ -265,26 +273,41 @@
   function coverZ(name) { var p = place(name); return Math.max(W / (PW * p.s), H / (PH * p.s)); }
   function fit(c, name) {   // keep the picture over the whole screen where it is big enough
     var p = place(name), hw = W / 2 / c.z, hh = H / 2 / c.z, iw = PW * p.s, ih = PH * p.s;
-    c.x = iw >= hw * 2 ? clamp(c.x, p.ox + hw, p.ox + iw - hw) : p.ox + iw / 2;
-    c.y = ih >= hh * 2 ? clamp(c.y, p.oy + hh, p.oy + ih - hh) : p.oy + ih / 2;
+    if (iw >= hw * 2) c.x = clamp(c.x, p.ox + hw, p.ox + iw - hw);
+    if (ih >= hh * 2) c.y = clamp(c.y, p.oy + hh, p.oy + ih - hh);
     return c;
   }
-  // camera keyframes: a point of a picture at the centre; landscape screens zoom relative to "cover",
-  // portrait screens show `vw` picture pixels across
-  var K = {
-    seedA: { pic: "seed", u: 1110, v: 470, mul: 1.22, vw: 760 },
-    seedB: { pic: "seed", u: 1040, v: 500, mul: 1.04, vw: 900 },
-    shell: { pic: "sprout", u: 1052, v: 640, mul: 1.5, vw: 620 },
-    sprout: { pic: "sprout", u: 1062, v: 450, mul: 1.05, vw: 720 },
-    young: { pic: "young", u: 1030, v: 430, mul: 1.0, vw: 1200 },
-    tree: { pic: "tree", u: 836, v: 470, mul: 1.0, vw: 1560 },
-  };
-  function camK(k) {
-    var p = place(k.pic), z = portrait() ? W / (k.vw * p.s) : coverZ(k.pic) * k.mul;
-    return fit({ x: p.ox + k.u * p.s, y: p.oy + k.v * p.s, z: z }, k.pic);
+  // Wide screens show each picture as painted, in one frame for its words and its art: as large as fills the
+  // screen, but never so large that the words or the art are cut off (what is left over at the edges of
+  // screens wider or narrower than 16:9 is the picture mirrored: more sky, more bark).
+  function frameScale(x0, x1, y0, y1) {
+    var mx = Math.max(16, W * 0.02), my = 8;
+    return Math.min(Math.max(W / PW, H / PH), (W - 2 * mx) / (x1 - x0), (H - 2 * my) / (y1 - y0));
   }
-  function camHouse(i) {
-    var h = PICS.tree.houses[i], p = place("tree");
+  function restFrame() {   // growth pictures: words from x 80, art to x 1530 (the outermost leaf tips may be cut)
+    var s = frameScale(80, 1530, 8, 878);
+    return { s: s, ox: W / 2 - 805 * s, oy: H / 2 - 443 * s };
+  }
+  // camera keyframes. Wide screens show the picture in its frame (see restFrame), pushing in by `mul` around
+  // the art (ax, ay) so the art grows in place and never slides under the words.
+  // Portrait screens show the art alone, `vw` picture pixels across around (u, v); the words sit above it.
+  var K = {
+    seedA: { pic: "seed", mul: 1.0, ax: 1150, ay: 560, u: 1145, v: 536, vw: 794 },
+    seedB: { pic: "seed", mul: 1.04, ax: 1150, ay: 560, u: 1149, v: 541, vw: 900 },
+    shell: { pic: "sprout", mul: 1.08, ax: 1070, ay: 690, u: 1068, v: 660, vw: 640 },
+    sprout: { pic: "sprout", mul: 1.03, ax: 1080, ay: 470, u: 1086, v: 453, vw: 700 },
+    young: { pic: "young", mul: 1.0, ax: 1180, ay: 470, u: 1174, v: 448, vw: 912 },
+    tree: { pic: "tree", mul: 1.0, ax: 1120, ay: 480, u: 1122, v: 481, vw: 1225 },
+  };
+  function camK(k, extra) {
+    var p = place(k.pic);
+    if (portrait()) return fit({ x: p.ox + k.u * p.s, y: p.oy + k.v * p.s, z: W / (k.vw * p.s) * (extra || 1) }, k.pic);
+    var F = restFrame(), z = F.s * k.mul * (extra || 1) / p.s;
+    var X = F.ox + k.ax * F.s, Y = F.oy + k.ay * F.s;   // where the anchor sits in the frame
+    return { x: p.ox + k.ax * p.s - (X - W / 2) / z, y: p.oy + k.ay * p.s - (Y - CY) / z, z: z };
+  }
+  function camStop(i) {   // close on the sign of branch i
+    var h = PICS.tree.stops[i], p = place("tree");
     var z = portrait() ? W / (h[2] * 1.02 * p.s) : Math.min(W / (h[2] * p.s), H / (h[3] * p.s)) * 0.9;
     z = Math.max(z, coverZ("tree") * 1.25);
     return fit({ x: p.ox + (h[0] + h[2] / 2) * p.s, y: p.oy + (h[1] + h[3] / 2) * p.s, z: z }, "tree");
@@ -293,7 +316,7 @@
   function hopCam(a, b, t, hop) { var c = mixCam(a, b, t); c.z *= Math.exp(-hop * Math.sin(PI * t)); return c; }
   function rectOf(name, c) {
     var p = place(name);
-    return { x: (p.ox - c.x) * c.z + W / 2, y: (p.oy - c.y) * c.z + H / 2, w: PW * p.s * c.z, h: PH * p.s * c.z };
+    return { x: (p.ox - c.x) * c.z + W / 2, y: (p.oy - c.y) * c.z + CY, w: PW * p.s * c.z, h: PH * p.s * c.z };
   }
   function coverRect(name, mul) {
     var f = PICS[name].focus || [PW / 2, PH / 2], s = Math.max(W / PW, H / PH) * mul, w = PW * s, h = PH * s;
@@ -305,12 +328,60 @@
     if (portrait()) {
       s = W / 820 * push; w = PW * s; hh = PH * s;
       var pan = lerp(0.12, 0.88, e); if (dir < 0) pan = 1 - pan;
-      return { x: -(w - W) * pan, y: (H + 64) / 2 - hh / 2, w: w, h: hh };
+      return { x: -(w - W) * pan, y: (PICS[name].text ? artCY() : (H + HEAD) / 2) - hh / 2, w: w, h: hh };
     }
-    // pan across the whole width while you scroll, so nothing at the edges (a sign, a chat bubble) stays cut off
-    s = Math.max(W / PW, H / PH) * (1 + 0.03 * e) * push; w = PW * s; hh = PH * s;
-    var panX = lerp(0.04, 0.96, e); if (dir < 0) panX = 1 - panX;
-    return { x: (W - w) * panX, y: clamp(H / 2 - (f[1] - 20 * e) * s, H - hh, 0), w: w, h: hh };
+    // the sign (from x 50) and the painted words (to x 1612) always fit; drift slowly while you scroll
+    var s0 = frameScale(50, 1612, 20, 925), mx = Math.max(16, W * 0.02);
+    s = s0 * (1 + 0.03 * e) * push; w = PW * s; hh = PH * s;
+    var xa = mx - 50 * s, xb = W - mx - 1612 * s;     // sign at the left edge / words at the right edge
+    var x = xb < xa ? lerp(xa, xb, dir > 0 ? e : 1 - e) : (W - (50 + 1612) * s) / 2;
+    return { x: x, y: H / 2 - (472 - 12 * e) * s, w: w, h: hh };
+  }
+
+  /* ---------- the painted words of the growth pictures ---------- */
+  var TEXTPICS = Object.keys(PICS).filter(function (n) { return PICS[n].text; });
+  var COPYW = Math.max.apply(null, TEXTPICS.map(function (n) { return PICS[n].text.copy[2]; }));
+  var COPYH = Math.max.apply(null, TEXTPICS.map(function (n) { return PICS[n].text.copy[3]; }));
+  function copyScale() { return Math.min((W - 32) / COPYW, H * 0.4 / COPYH, 0.9); }
+  function copyTop() { return HEAD + 8; }
+  function artCY() { var b = copyTop() + COPYH * copyScale(); return b + (H - b) / 2; }   // phones: the art below the words
+  function part(t, k) { var b = t.box, q = t[k]; return [q[0] - b[0], q[1] - b[1], q[2], q[3]]; }
+  // screen places of a picture's text layer: [source rect in the layer, destination rect on screen].
+  // Wide screens: the whole layer, as painted, in the picture's frame (`rect`, for a branch picture where it
+  // is now; the growth pictures' resting frame otherwise). Phones: the logo in the header, the words on top.
+  function textParts(name, rect) {
+    var t = PICS[name].text, b = t.box, out = [], s, ox, oy, sc;
+    if (!portrait()) {
+      if (rect) { s = rect.w / PW; ox = rect.x; oy = rect.y; } else { var F = restFrame(); s = F.s; ox = F.ox; oy = F.oy; }
+      out.push([[0, 0, b[2], b[3]], [ox + b[0] * s, oy + b[1] * s, b[2] * s, b[3] * s]]);
+      out.button = [ox + t.button[0] * s, oy + t.button[1] * s, t.button[2] * s, t.button[3] * s];
+      return out;
+    }
+    if (t.logo) {
+      s = Math.min(50 / t.logo[3], 1);
+      out.push([part(t, "logo"), [16, HEAD / 2 - t.logo[3] * s / 2, t.logo[2] * s, t.logo[3] * s]]);
+    }
+    sc = copyScale(); ox = 16; oy = copyTop();
+    out.push([part(t, "copy"), [ox, oy, t.copy[2] * sc, t.copy[3] * sc]]);
+    out.button = [ox + (t.button[0] - t.copy[0]) * sc, oy + (t.button[1] - t.copy[1]) * sc, t.button[2] * sc, t.button[3] * sc];
+    if (t.scroll) out.scroll = [part(t, "scroll"), [16, H - 18 - t.scroll[3] * sc, t.scroll[2] * sc, t.scroll[3] * sc]];
+    return out;
+  }
+  // how much of each picture's words shows at a point of the story (crossfades with the pictures)
+  function textAt(k, f, i, out) {
+    function add(n, a) { if (a > 0.003) out.text.push({ pic: n, a: a }); }
+    var x;
+    switch (k) {
+      case "seed": add("seed", 1); break;
+      case "sprout": x = smooth(seg(f, 0.04, 0.34)); add("seed", 1 - x); add("sprout", x); break;
+      case "young": x = smooth(seg(f, 0.02, 0.2)); add("sprout", 1 - x); add("young", x); break;
+      case "tree": x = smooth(seg(f, 0.02, 0.2)); add("young", 1 - x); add("tree", x); break;
+      case "full": add("tree", 1); break;
+      case "dive": if (!i) add("tree", 1 - smooth(seg(f, 0, 0.22))); break;
+      case "outro": add("tree", smooth(seg(f, 0.55, 0.95))); break;
+      case "end": add("tree", 1); break;
+    }
+    return out.text.reduce(function (a, e) { return a + e.a; }, 0);
   }
 
   /* ---------- the scroll story ---------- */
@@ -335,14 +406,16 @@
     if (o.alpha > 0.04) out.fx.push({ pic: name, rect: o.rect, a: o.alpha * (o.fxA == null ? 1 : o.fxA), T: o.T == null ? 1 : o.T });
     return o;
   }
-  function backdrop(name, a) { return { pic: name, rect: coverRect(name, 1.12), alpha: a, blur: 1, dim: 0.8 }; }
+  function backdrop(name, a) { return { pic: name, rect: coverRect(name, 1.12), alpha: a, blur: 1, dim: 0.97 }; }
   function closeLayer(out, i, rect, o) {
     var name = BR[i];
     o = o || {};
     o.pic = name; o.rect = rect; o.live = true;
     if (o.alpha == null) o.alpha = 1;
-    if (portrait()) { o.feather = 0.03; out.back.push(backdrop(name, o.alpha)); }
+    if (portrait()) { o.feather = 0.03; out.back.push(backdrop(name, o.alpha)); } else o.mirror = true;
     out.layers.push(o);
+    // the words stay at the picture's resting size while the art pushes in or out
+    if (PICS[name].text && o.alpha > 0.003) out.text.push({ pic: name, a: o.alpha, rect: o.textRect || rect });
     if (o.alpha > 0.04) out.fx.push({ pic: name, rect: rect, a: o.alpha, T: 1 });
     return o;
   }
@@ -352,8 +425,10 @@
     var s = SEGS[SEGS.length - 1];
     for (var n = 0; n < SEGS.length; n++) if (u < SEGS[n].a + SEGS[n].d) { s = SEGS[n]; break; }
     var f = clamp((u - s.a) / s.d, 0, 1), i = s.i;
-    var out = { back: [], layers: [], fx: [], k: s.k };
+    var out = { back: [], layers: [], fx: [], text: [], k: s.k };
     var cam, d, T, e1, dOut, dIn, k, fly;
+    textAt(s.k, f, i, out);
+    CY = portrait() ? artCY() : H / 2;   // phones: the art always sits below the words (every picture has words)
     switch (s.k) {
       case "seed":
         cam = mixCam(camK(K.seedA), camK(K.seedB), ease(f));
@@ -379,45 +454,45 @@
         worldLayer(out, "tree", cam, { T: T, reveal: true, rim: 1, bd: T, fxA: T });
         break;
       case "full":
-        cam = camK(K.tree); cam.z *= 1 + 0.02 * smooth(f); cam = fit(cam, "tree");
+        cam = camK(K.tree, 1 + 0.02 * smooth(f));
         worldLayer(out, "tree", cam);
         break;
-      case "dive": {   // into tree house i: (back out of the last picture,) fly there, dissolve into its picture
+      case "dive": {   // to sign i: (back out of the last picture,) fly there, dissolve into its branch's picture
         var name = BR[i], prev = i ? BR[i - 1] : null;
         e1 = 1; dOut = 1;
         if (!prev) {
           fly = ease(seg(f, 0, 0.66)); dIn = smooth(seg(f, 0.5, 0.78)); k = ease(seg(f, 0.74, 1));
-          cam = mixCam(camK(K.tree), camHouse(0), fly);
+          cam = mixCam(camK(K.tree), camStop(0), fly);
         } else {
           e1 = ease(seg(f, 0, 0.16)); dOut = smooth(seg(f, 0.12, 0.32));
           fly = ease(seg(f, 0.28, 0.7)); dIn = smooth(seg(f, 0.6, 0.82)); k = ease(seg(f, 0.78, 1));
-          cam = hopCam(camHouse(i - 1), camHouse(i), fly, 0.45);
+          cam = hopCam(camStop(i - 1), camStop(i), fly, 0.45);
           cam.z *= lerp(1.16, 1, dOut);
         }
-        cam.z *= lerp(1, 1.22, dIn);   // keep pushing in while the tree house dissolves into its picture
+        cam.z *= lerp(1, 1.22, dIn);   // keep pushing in while the sign dissolves into its branch's picture
         cam = fit(cam, "tree");
         if (dOut > 0 && k <= 0) {
           var tb = treeBlur(cam) + 0.45 * Math.sin(PI * dIn) + (prev ? 0.45 * Math.sin(PI * dOut) : 0);
           worldLayer(out, "tree", cam, { blur: tb });
         }
-        if (prev && dOut < 1) closeLayer(out, i - 1, closeRect(i - 1, 1, lerp(1, 1.1, e1)), { alpha: 1 - dOut, blur: dOut * 0.6 });
-        if (dIn > 0) closeLayer(out, i, closeRect(i, 0, lerp(1.16, 1, k)), { alpha: dIn, blur: (1 - dIn) * 0.6 });
+        if (prev && dOut < 1) closeLayer(out, i - 1, closeRect(i - 1, 1, lerp(1, 1.1, e1)), { alpha: 1 - dOut, blur: dOut * 0.6, textRect: closeRect(i - 1, 1, 1) });
+        if (dIn > 0) closeLayer(out, i, closeRect(i, 0, lerp(1.16, 1, k)), { alpha: dIn, blur: (1 - dIn) * 0.6, textRect: closeRect(i, 0, 1) });
         break;
       }
       case "hold":
         closeLayer(out, i, closeRect(i, f, 1));
         break;
-      case "outro": {  // back out of the last tree house to the whole tree
+      case "outro": {  // back out of the last branch to the whole tree
         var last = BR.length - 1;
         e1 = ease(seg(f, 0, 0.16)); dOut = smooth(seg(f, 0.12, 0.4));
-        cam = mixCam(camHouse(last), camK(K.tree), ease(seg(f, 0.32, 1)));
+        cam = mixCam(camStop(last), camK(K.tree), ease(seg(f, 0.32, 1)));
         cam.z *= lerp(1.16, 1, dOut); cam = fit(cam, "tree");
         if (dOut > 0) worldLayer(out, "tree", cam, { blur: treeBlur(cam) + 0.45 * Math.sin(PI * dOut) });
-        if (dOut < 1) closeLayer(out, last, closeRect(last, 1, lerp(1, 1.1, e1)), { alpha: 1 - dOut, blur: dOut * 0.6 });
+        if (dOut < 1) closeLayer(out, last, closeRect(last, 1, lerp(1, 1.1, e1)), { alpha: 1 - dOut, blur: dOut * 0.6, textRect: closeRect(last, 1, 1) });
         break;
       }
       default:   // end: the whole tree
-        cam = camK(K.tree); cam.z *= 1 + 0.025 * smooth(f); cam = fit(cam, "tree");
+        cam = camK(K.tree, 1 + 0.025 * smooth(f));
         worldLayer(out, "tree", cam);
     }
     return out;
@@ -465,7 +540,7 @@
     vignette = makeCanvas(Math.max(2, Math.round(W / 4)), Math.max(2, Math.round(H / 4)));
     var vx = vignette.getContext("2d"), vw = vignette.width, vh = vignette.height;
     var g = vx.createRadialGradient(vw / 2, vh * 0.48, Math.min(vw, vh) * 0.35, vw / 2, vh / 2, Math.hypot(vw, vh) * 0.62);
-    g.addColorStop(0, "rgba(16,10,4,0)"); g.addColorStop(1, "rgba(16,10,4,0.32)");
+    g.addColorStop(0, "rgba(90,52,20,0)"); g.addColorStop(1, "rgba(90,52,20,0.16)");
     vx.fillStyle = g; vx.fillRect(0, 0, vw, vh);
   }
 
@@ -586,8 +661,55 @@
     fx.globalAlpha = 1;
   }
 
+  function drawText(st) {
+    fx.imageSmoothingEnabled = true; fx.imageSmoothingQuality = "high";
+    st.text.forEach(function (e) {
+      var im = IM[e.pic].textImg;
+      if (!im) return;
+      textParts(e.pic, e.rect).forEach(function (q) {
+        fx.globalAlpha = e.a; fx.drawImage(im, q[0][0], q[0][1], q[0][2], q[0][3], q[1][0], q[1][1], q[1][2], q[1][3]);
+      });
+      if (portrait() && e.pic === "seed") {   // "Scroll to explore", until the visitor starts scrolling
+        var sc = textParts("seed").scroll, a = e.a * (1 - clamp(current / 0.25, 0, 1));
+        if (a > 0.01) { fx.globalAlpha = a; fx.drawImage(im, sc[0][0], sc[0][1], sc[0][2], sc[0][3], sc[1][0], sc[1][1], sc[1][2], sc[1][3]); }
+      }
+    });
+    fx.globalAlpha = 1;
+  }
+
+  // the painted buttons are links: an invisible link sits over each while its picture is on screen
+  var CTA = {};
+  function scrollToBranches() {
+    var hold = SEGS.filter(function (g) { return g.k === "hold" && g.i === 0; })[0];
+    var top = section.getBoundingClientRect().top + window.pageYOffset;
+    var y = top + hold.a / totalUnits * (section.offsetHeight - window.innerHeight);
+    window.scrollTo({ top: Math.round(y), behavior: reduceMotion ? "auto" : "smooth" });
+  }
+  Object.keys(PICS).forEach(function (name) {
+    var c = PICS[name].cta;
+    if (!c) return;
+    var a = document.createElement("a");
+    a.className = "grow-cta"; a.textContent = c.label; a.hidden = true;
+    if (c.wa) { a.href = window.bongwebWa ? window.bongwebWa(c.wa) : "#grow"; a.target = "_blank"; a.rel = "noopener"; }
+    else { a.href = "#grow"; a.addEventListener("click", function (ev) { ev.preventDefault(); scrollToBranches(); }); }
+    stage.appendChild(a);
+    CTA[name] = { el: a, key: "" };
+  });
+  function placeCtas(st) {
+    var on = {};
+    st.text.forEach(function (e) { if (e.a > 0.6 && CTA[e.pic]) on[e.pic] = textParts(e.pic, e.rect).button; });
+    Object.keys(CTA).forEach(function (n) {
+      var q = on[n], o = CTA[n];
+      if (q && (q[0] + q[2] < 0 || q[1] + q[3] < 0 || q[0] > W || q[1] > H)) q = null;
+      var key = q ? q.map(Math.round).join(",") : "";
+      if (key === o.key) return;
+      o.key = key; o.el.hidden = !q;
+      if (q) { var st2 = o.el.style; st2.left = q[0] + "px"; st2.top = q[1] + "px"; st2.width = q[2] + "px"; st2.height = q[3] + "px"; }
+    });
+  }
+
   /* ---------- wiring ---------- */
-  var hintEl = section.querySelector(".grow-hint");
+  var header = document.querySelector(".site-header");
   var target = 0, current = 0, needPic = function () {};
   function readScroll() {
     var rect = section.getBoundingClientRect();
@@ -597,6 +719,8 @@
   function resize() {
     W = stage.clientWidth; H = stage.clientHeight;
     if (!W || !H) return;
+    HEAD = header ? Math.max(48, header.getBoundingClientRect().bottom - stage.getBoundingClientRect().top) : 68;
+    CY = H / 2;
     // the pictures are 1672 px wide, so beyond ~3 million canvas pixels a sharper canvas shows nothing new
     DPR = Math.min(window.devicePixelRatio || 1, 2, Math.sqrt(3.2e6 / (W * H)));
     canvas.width = Math.round(W * DPR); canvas.height = Math.round(H * DPR);
@@ -641,8 +765,8 @@
     if (!noFx) st.fx.forEach(function (e) { if (IM[e.pic].ready) drawPicFx(e, clockT); });
     if (!noFx) drawAir(dt, clockT, st);
     if (vignette && !noFx) { fx.globalAlpha = 1; fx.drawImage(vignette, 0, 0, W, H); }
-
-    if (hintEl) hintEl.classList.toggle("is-hidden", current > 0.15);
+    drawText(st);
+    placeCtas(st);
   }
 
   R = makeGL();
@@ -667,10 +791,11 @@
     var c = PICS[name], d = S.dir;
     return Promise.all([
       loadImg(d + name + ".webp"), c.mask ? loadImg(d + name + "-mask.png") : null, c.plate ? loadImg(d + name + "-plate.webp") : null,
+      c.text ? loadImg(d + name + "-text.webp") : null,
     ]).then(function (r) {
       var p = IM[name];
       if (!r[0]) return;
-      p.img = r[0]; p.mask = r[1]; p.plate = r[2];
+      p.img = r[0]; p.mask = r[1]; p.plate = r[2]; p.textImg = r[3];
       if (R) R.upload(p);
       p.ready = true;
     });
